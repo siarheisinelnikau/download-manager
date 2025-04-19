@@ -1,0 +1,36 @@
+[package]
+name = "download-manager"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+description = "A native queued download manager with conservative verified resume"
+repository = "https://github.com/siarheisinelnikau/download-manager"
+
+[dependencies]
+anyhow = "1.0.104"
+eframe = { version = "=0.33.3", default-features = false, features = ["default_fonts", "glow", "x11"] }
+fs2 = "0.4.3"
+semver = "1.0.28"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.10.9"
+ureq = { version = "3.5.0", default-features = false, features = ["rustls"] }
+url = "2.5.8"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[features]
+loopback-tests = []
+
+[[test]]
+name = "downloads"
+required-features = ["loopback-tests"]
+
+[profile.release]
+strip = "symbols"
+
