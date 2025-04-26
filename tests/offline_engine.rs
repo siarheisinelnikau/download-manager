@@ -9,6 +9,8 @@ use std::{
     sync::{Arc, atomic::AtomicU8},
 };
 use tempfile::TempDir;
+mod support;
+use support::fixture_dir;
 
 fn job(dir: &TempDir) -> Download {
     Download {
@@ -69,20 +71,21 @@ fn partial(job: &Download) {
 #[test]
 fn completes_known_and_unknown_lengths_and_refuses_overwrite() {
     for headers in [vec![("content-length", "5")], vec![]] {
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job(&dir);
         assert_eq!(
             transfer(&job, response(200, &headers, b"abcde"), None).unwrap(),
             Outcome::Completed
         );
         assert_eq!(std::fs::read(&job.destination).unwrap(), b"abcde");
+        std::fs::remove_file(job.meta_path()).unwrap(); // Queue completion is now durably recorded.
         assert!(transfer(&job, response(200, &[], b"bad"), None).is_err());
         assert_eq!(std::fs::read(job.destination).unwrap(), b"abcde");
     }
 }
 #[test]
 fn resumes_only_a_valid_matching_entity() {
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(&dir);
     partial(&job);
     assert_eq!(
@@ -135,7 +138,7 @@ fn wrong_ranges_changed_etags_and_refused_ranges_preserve_partial() {
         ),
         (206, vec![("etag", "\"v1\"")]),
     ] {
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job(&dir);
         partial(&job);
         assert!(
@@ -152,7 +155,7 @@ fn wrong_ranges_changed_etags_and_refused_ranges_preserve_partial() {
 }
 #[test]
 fn changed_redirect_target_is_rejected() {
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(&dir);
     partial(&job);
     let mut changed = response(
@@ -167,7 +170,7 @@ fn changed_redirect_target_is_rejected() {
 #[test]
 fn unsafe_content_encoding_and_insecure_redirects_are_rejected() {
     for encoding in [true, false] {
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job(&dir);
         let mut source = response(200, &[], b"abcde");
         if encoding {
@@ -184,7 +187,7 @@ fn unsafe_content_encoding_and_insecure_redirects_are_rejected() {
 #[test]
 fn no_validator_never_appends_to_a_partial() {
     for etag in [None, Some("W/\"weak\"")] {
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job(&dir);
         let mut headers = vec![("content-length", "10")];
         if let Some(etag) = etag {
@@ -204,7 +207,7 @@ fn no_validator_never_appends_to_a_partial() {
 }
 #[test]
 fn truncates_uncommitted_tail_but_rejects_edited_prefix() {
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(&dir);
     partial(&job);
     std::fs::OpenOptions::new()
@@ -226,7 +229,7 @@ fn truncates_uncommitted_tail_but_rejects_edited_prefix() {
         .unwrap(),
         Outcome::Completed
     );
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = self::job(&dir);
     partial(&job);
     std::fs::write(job.part_path(), b"xxxxx").unwrap();
@@ -239,7 +242,7 @@ fn truncates_uncommitted_tail_but_rejects_edited_prefix() {
 }
 #[test]
 fn complete_checkpoint_can_be_finalized_after_a_destination_collision() {
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(&dir);
     let result = engine::transfer_with_source(
         &job,
@@ -264,6 +267,98 @@ fn complete_checkpoint_can_be_finalized_after_a_destination_collision() {
     assert_eq!(result.unwrap(), Outcome::Completed);
     assert_eq!(std::fs::read(&job.destination).unwrap(), b"abcde");
 }
+
+#[test]
+fn receipt_recovers_a_crash_between_rename_and_queue_commit() {
+    let dir = fixture_dir();
+    let job = job(&dir);
+    assert_eq!(
+        transfer(&job, response(200, &[], b"abcde"), None).unwrap(),
+        Outcome::Completed
+    );
+    assert!(job.meta_path().exists());
+    assert!(!job.part_path().exists());
+    let result = engine::transfer_with_source(
+        &job,
+        Arc::new(AtomicU8::new(0)),
+        Arc::new(Bandwidth::default()),
+        |_| {},
+        |_, _| panic!("recovery must not use network"),
+    );
+    assert_eq!(result.unwrap(), Outcome::Completed);
+    std::fs::write(&job.destination, b"xxxxx").unwrap();
+    assert!(
+        transfer(&job, response(200, &[], b""), None)
+            .unwrap_err()
+            .to_string()
+            .contains("checksum changed")
+    );
+}
+
+#[test]
+fn pause_during_stream_saves_a_resumable_checkpoint() {
+    use std::sync::atomic::Ordering;
+    struct PauseReader {
+        control: Arc<AtomicU8>,
+        bytes: Cursor<Vec<u8>>,
+    }
+    impl Read for PauseReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            let count = self.bytes.read(buffer)?;
+            self.control.store(1, Ordering::Relaxed);
+            Ok(count)
+        }
+    }
+    let dir = fixture_dir();
+    let job = job(&dir);
+    let control = Arc::new(AtomicU8::new(0));
+    let mut source = response(200, &[("etag", "\"v1\""), ("content-length", "10")], b"");
+    source.body = Box::new(PauseReader {
+        control: control.clone(),
+        bytes: Cursor::new(b"abcde".to_vec()),
+    });
+    let result = engine::transfer_with_source(
+        &job,
+        control,
+        Arc::new(Bandwidth::default()),
+        |_| {},
+        |_, _| Ok(source),
+    );
+    assert_eq!(result.unwrap(), Outcome::Paused);
+    assert_eq!(std::fs::read(job.part_path()).unwrap(), b"abcde");
+    assert_eq!(
+        transfer(
+            &job,
+            response(
+                206,
+                &[("etag", "\"v1\""), ("content-range", "bytes 5-9/10")],
+                b"fghij"
+            ),
+            Some((5, "\"v1\""))
+        )
+        .unwrap(),
+        Outcome::Completed
+    );
+}
+
+#[test]
+fn total_bandwidth_limit_delays_delivery_and_can_be_disabled() {
+    let dir = fixture_dir();
+    let job = job(&dir);
+    let bandwidth = Arc::new(Bandwidth::default());
+    bandwidth.set_limit(10);
+    let start = std::time::Instant::now();
+    let result = engine::transfer_with_source(
+        &job,
+        Arc::new(AtomicU8::new(0)),
+        bandwidth.clone(),
+        |_| {},
+        |_, _| Ok(response(200, &[], &[1; 3072])),
+    );
+    assert_eq!(result.unwrap(), Outcome::Completed);
+    assert!(start.elapsed() >= std::time::Duration::from_millis(250));
+    bandwidth.set_limit(0);
+}
 struct BrokenReader {
     prefix: Cursor<Vec<u8>>,
 }
@@ -281,7 +376,7 @@ impl Read for BrokenReader {
 }
 #[test]
 fn network_error_checkpoints_received_bytes() {
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(&dir);
     let mut source = response(200, &[("etag", "\"v1\""), ("content-length", "10")], b"");
     source.body = Box::new(BrokenReader {
@@ -294,7 +389,7 @@ fn network_error_checkpoints_received_bytes() {
 #[test]
 fn pause_and_cancel_are_honored_without_network() {
     for signal in [1, 2] {
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job(&dir);
         let result = engine::transfer_with_source(
             &job,

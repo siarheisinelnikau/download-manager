@@ -76,9 +76,10 @@ impl Bandwidth {
     }
 }
 
-pub fn agent() -> ureq::Agent {
+fn agent(https_only: bool) -> ureq::Agent {
     ureq::Agent::config_builder()
         .http_status_as_error(false)
+        .https_only(https_only)
         .max_redirects(8)
         .timeout_resolve(Some(Duration::from_secs(10)))
         .timeout_connect(Some(Duration::from_secs(10)))
@@ -106,7 +107,7 @@ impl Response {
 
 /// The real network adapter. Range and If-Range are sent together on resume.
 fn fetch(url: &str, resume: Option<(u64, &str)>) -> Result<Response> {
-    let agent = agent();
+    let agent = agent(url.starts_with("https:"));
     let mut request = agent.get(url).header("Accept-Encoding", "identity");
     if let Some((offset, etag)) = resume {
         request = request
@@ -182,6 +183,40 @@ pub fn transfer_with_source(
     mut progress: impl FnMut(Progress),
     source: impl FnOnce(&str, Option<(u64, &str)>) -> Result<Response>,
 ) -> Result<Outcome> {
+    // A crash can occur between the final rename and durable queue completion.
+    // A retained, verified completion receipt makes that window recoverable.
+    if job.destination.exists() && !job.part_path().exists() && job.meta_path().exists() {
+        let receipt: PartialMetadata = storage::read_json(&job.meta_path(), 64 * 1024)?;
+        if receipt.complete && receipt.url == job.url {
+            let mut final_file = File::open(&job.destination)?;
+            ensure!(
+                final_file.metadata()?.len() == receipt.bytes,
+                "Completed file length changed; original file preserved"
+            );
+            let mut hash = Sha256::new();
+            let mut buffer = [0u8; 32 * 1024];
+            loop {
+                if control.load(Ordering::Relaxed) != 0 {
+                    return Ok(control_outcome(&control));
+                }
+                let count = final_file.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                hash.update(&buffer[..count]);
+            }
+            ensure!(
+                format!("{:x}", hash.finalize()) == receipt.sha256,
+                "Completed file checksum changed; original file preserved"
+            );
+            progress(Progress {
+                bytes: receipt.bytes,
+                total: Some(receipt.bytes),
+                speed: 0.0,
+            });
+            return Ok(Outcome::Completed);
+        }
+    }
     ensure!(
         !job.destination.exists(),
         "Destination already exists; choose another filename. It has not been overwritten."
@@ -247,7 +282,6 @@ pub fn transfer_with_source(
         drop(file);
         storage::finalize(&part_path, &job.destination)
             .context("Cannot finalize file; check permissions and destination name")?;
-        let _ = fs::remove_file(job.meta_path());
         progress(Progress {
             bytes: meta.bytes,
             total: Some(meta.bytes),
@@ -401,7 +435,6 @@ pub fn transfer_with_source(
     checkpoint(&file, job, &mut meta, done, &hash, true)?;
     drop(file);
     storage::finalize(&part_path, &job.destination).context("Cannot finalize file; destination may exist or disk access failed. Retry preserves the complete partial file.")?;
-    let _ = fs::remove_file(job.meta_path());
     progress(Progress {
         bytes: done,
         total: Some(done),
