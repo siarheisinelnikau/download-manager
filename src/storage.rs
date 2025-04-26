@@ -122,6 +122,26 @@ pub fn load_state(directory: &Path) -> Result<State> {
             state.schema
         );
     }
+    if state.downloads.len() > 10_000 {
+        bail!("Queue history exceeds the supported 10,000 entries");
+    }
+    let mut ids = std::collections::HashSet::new();
+    for job in &state.downloads {
+        if job.id == 0
+            || !ids.insert(job.id)
+            || job.id >= state.next_id
+            || !job.destination.is_absolute()
+        {
+            bail!("Invalid queue identity/path; original state file has been preserved");
+        }
+        crate::model::validate_url(&job.url).context("Invalid URL in stored queue")?;
+        crate::model::validate_filename(
+            job.destination
+                .file_name()
+                .and_then(|n| n.to_str())
+                .context("Invalid destination filename")?,
+        )?;
+    }
     state.settings.concurrency = state.settings.concurrency.clamp(1, 4);
     state.settings.bandwidth_kib = state.settings.bandwidth_kib.min(1_048_576);
     for job in &mut state.downloads {

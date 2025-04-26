@@ -13,6 +13,8 @@ use std::{
     time::Duration,
 };
 use tempfile::TempDir;
+mod support;
+use support::fixture_dir;
 
 fn server(
     handler: impl FnOnce(TcpStream, String) + Send + 'static,
@@ -68,10 +70,11 @@ fn downloads_known_and_unknown_length_without_overwriting() {
             )
             .unwrap();
         });
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job(url, &dir);
         assert_eq!(run(&job).unwrap(), Outcome::Completed);
         assert_eq!(std::fs::read(&job.destination).unwrap(), b"hello world");
+        std::fs::remove_file(job.meta_path()).unwrap();
         assert!(
             run(&job)
                 .unwrap_err()
@@ -117,7 +120,7 @@ fn interrupted_transfer_resumes_with_range_and_if_range() {
         assert!(req.contains("if-range: \"v1\"\r\n"));
         write!(s, "HTTP/1.1 206 Partial Content\r\nETag: \"v1\"\r\nContent-Range: bytes 5-9/10\r\nContent-Length: 5\r\nConnection: close\r\n\r\nfghij").unwrap();
     });
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(url, &dir);
     assert!(run(&job).is_err());
     assert_eq!(std::fs::read(job.part_path()).unwrap(), b"abcde");
@@ -139,7 +142,7 @@ fn unsafe_range_responses_preserve_partial_bytes() {
         let (url, handle) = interrupted_fixture(move |mut s, _| {
             write!(s, "HTTP/1.1 {response}\r\nConnection: close\r\n\r\nfghij").unwrap();
         });
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job(url, &dir);
         assert!(run(&job).is_err());
         assert!(run(&job).is_err());
@@ -152,7 +155,7 @@ fn unsafe_range_responses_preserve_partial_bytes() {
 #[test]
 fn cancel_and_pause_preserve_data_and_prevent_finalization() {
     for signal in [1, 2] {
-        let dir = TempDir::new().unwrap();
+        let dir = fixture_dir();
         let job = job("http://127.0.0.1:1/unused".into(), &dir);
         let result = engine::transfer(
             &job,
@@ -178,7 +181,7 @@ fn edited_partial_is_rejected_before_any_network_request() {
     let (url, handle) = server(|mut s, _| {
         write!(s, "HTTP/1.1 200 OK\r\nETag: \"v1\"\r\nContent-Length: 10\r\nConnection: close\r\n\r\nabcde").unwrap();
     });
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(url, &dir);
     assert!(run(&job).is_err());
     handle.join().unwrap();
@@ -193,7 +196,7 @@ fn edited_partial_is_rejected_before_any_network_request() {
 
 #[test]
 fn destination_race_does_not_replace_existing_file() {
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let destination = dir.path().join("fixture.bin");
     let created = destination.clone();
     let (url, handle) = server(move |mut s, _| {
@@ -216,7 +219,7 @@ fn checkpoint_ignores_uncommitted_tail() {
     let (url, handle) = interrupted_fixture(|mut s, _| {
         write!(s, "HTTP/1.1 206 Partial Content\r\nETag: \"v1\"\r\nContent-Range: bytes 5-9/10\r\nContent-Length: 5\r\nConnection: close\r\n\r\nfghij").unwrap();
     });
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(url, &dir);
     assert!(run(&job).is_err());
     std::fs::OpenOptions::new()
@@ -240,7 +243,7 @@ fn controls_are_observed_while_streaming() {
         .unwrap();
         let _ = s.write_all(&[7; 65536]);
     });
-    let dir = TempDir::new().unwrap();
+    let dir = fixture_dir();
     let job = job(url, &dir);
     let control = Arc::new(AtomicU8::new(0));
     let stop = control.clone();
