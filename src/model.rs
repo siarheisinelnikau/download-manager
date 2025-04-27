@@ -84,6 +84,9 @@ impl Default for State {
 }
 
 pub fn validate_url(value: &str) -> Result<String> {
+    if value.len() > 8192 {
+        bail!("URL exceeds the supported 8 KiB limit");
+    }
     let mut url = url::Url::parse(value.trim())?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         bail!("Use an absolute HTTP or HTTPS URL");
@@ -104,7 +107,7 @@ pub fn validate_filename(name: &str) -> Result<()> {
             .any(|c| c.is_control() || "<>:\"/\\|?*".contains(c))
         || name == "."
         || name == ".."
-        || name.starts_with(".download-manager-")
+        || name.to_ascii_lowercase().starts_with(".download-manager-")
     {
         bail!("Choose a plain filename without reserved characters (maximum 180 bytes)");
     }

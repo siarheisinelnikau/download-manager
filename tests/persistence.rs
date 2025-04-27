@@ -68,6 +68,7 @@ fn filenames_and_urls_cannot_escape_or_target_windows_devices() {
         "bad.",
         "bad ",
         ".download-manager-4.part",
+        ".DOWNLOAD-MANAGER-4.part",
         "",
         "NUL",
         "a\\b",
