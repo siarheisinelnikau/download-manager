@@ -122,6 +122,9 @@ pub fn load_state(directory: &Path) -> Result<State> {
             state.schema
         );
     }
+    if state.next_id == 0 {
+        bail!("Invalid queue sequence; original state file has been preserved");
+    }
     if state.downloads.len() > 10_000 {
         bail!("Queue history exceeds the supported 10,000 entries");
     }

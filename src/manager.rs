@@ -55,6 +55,7 @@ pub enum Command {
     Cancel(u64),
     Restart(u64),
     MoveUp(u64),
+    RemoveCompleted(u64),
     PauseAll,
     ResumeAll,
     Settings(Settings),
@@ -387,6 +388,13 @@ fn apply(
                 error: None,
                 speed: 0.0,
             });
+            if serde_json::to_vec_pretty(state)?.len() > 15 * 1024 * 1024 {
+                state.downloads.pop();
+                state.next_id = id;
+                bail!(
+                    "Queue storage limit reached; remove completed history entries before adding more downloads"
+                );
+            }
         }
         Command::Settings(mut settings) => {
             settings.concurrency = settings.concurrency.clamp(1, 4);
@@ -420,6 +428,18 @@ fn apply(
             if pos > 0 {
                 state.downloads.swap(pos, pos - 1);
             }
+        }
+        Command::RemoveCompleted(id) => {
+            let pos = state
+                .downloads
+                .iter()
+                .position(|j| j.id == id)
+                .context("Download no longer exists")?;
+            ensure!(
+                state.downloads[pos].status == Status::Completed && !active.contains_key(&id),
+                "Only completed history entries can be removed"
+            );
+            state.downloads.remove(pos);
         }
         command => {
             let id = match command {

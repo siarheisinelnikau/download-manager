@@ -204,6 +204,11 @@ impl App {
                     ui.colored_label(Color32::from_rgb(170, 50, 40), error);
                 }
                 ui.horizontal_wrapped(|ui| {
+                    if job.status == Status::Completed
+                        && ui.small_button("Remove from history").clicked()
+                    {
+                        self.send(Command::RemoveCompleted(job.id));
+                    }
                     match job.status {
                         Status::Downloading | Status::Queued => {
                             if ui.small_button("Pause").clicked() {

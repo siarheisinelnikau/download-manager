@@ -16,13 +16,30 @@ use tempfile::TempDir;
 mod support;
 use support::fixture_dir;
 
+fn accept(listener: &TcpListener) -> TcpStream {
+    listener.set_nonblocking(true).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        match listener.accept() {
+            Ok((stream, _)) => return stream,
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    && std::time::Instant::now() < deadline =>
+            {
+                thread::sleep(Duration::from_millis(10))
+            }
+            Err(e) => panic!("Loopback accept failed or timed out: {e}"),
+        }
+    }
+}
+
 fn server(
     handler: impl FnOnce(TcpStream, String) + Send + 'static,
 ) -> (String, thread::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/fixture", listener.local_addr().unwrap());
     let handle = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let mut stream = accept(&listener);
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
@@ -93,7 +110,7 @@ fn interrupted_fixture(
     let url = format!("http://{}/fixture", listener.local_addr().unwrap());
     let handle = thread::spawn(move || {
         for index in 0..2 {
-            let (mut s, _) = listener.accept().unwrap();
+            let mut s = accept(&listener);
             s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
             let mut bytes = Vec::new();
             while !bytes.ends_with(b"\r\n\r\n") {
@@ -254,4 +271,20 @@ fn controls_are_observed_while_streaming() {
     assert_eq!(result, Outcome::Paused);
     assert!(!job.destination.exists());
     handle.join().unwrap();
+}
+
+#[test]
+fn follows_http_redirects_and_decodes_chunked_bodies() {
+    let (target, body_handle) = server(|mut s, _| {
+        write!(s, "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n").unwrap();
+    });
+    let (url, redirect_handle) = server(move |mut s, _| {
+        write!(s, "HTTP/1.1 302 Found\r\nLocation: {target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").unwrap();
+    });
+    let dir = fixture_dir();
+    let job = job(url, &dir);
+    assert_eq!(run(&job).unwrap(), Outcome::Completed);
+    assert_eq!(std::fs::read(job.destination).unwrap(), b"hello world");
+    redirect_handle.join().unwrap();
+    body_handle.join().unwrap();
 }
