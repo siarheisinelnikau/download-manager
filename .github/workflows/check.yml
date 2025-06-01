@@ -1,0 +1,27 @@
+name: Windows checks and portable build
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_TARGET_DIR: target
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-msvc
+      - name: Format, lint and synthetic/loopback tests
+        shell: pwsh
+        run: ./scripts/check.ps1 -Loopback
+      - name: Build portable Windows x64 package
+        shell: pwsh
+        run: ./scripts/package.ps1 -SkipChecks
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DownloadManager-Windows-x64
+          path: dist/*
+
