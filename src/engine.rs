@@ -86,7 +86,7 @@ fn agent(https_only: bool) -> ureq::Agent {
         .timeout_recv_response(Some(Duration::from_secs(15)))
         .timeout_per_read(Some(Duration::from_secs(10)))
         .timeout_per_write(Some(Duration::from_secs(10)))
-        .user_agent("DownloadManager/0.1.0")
+        .user_agent(concat!("DownloadManager/", env!("CARGO_PKG_VERSION")))
         .build()
         .into()
 }
@@ -122,6 +122,12 @@ fn fetch(url: &str, resume: Option<(u64, &str)>) -> Result<Response> {
     let headers = response
         .headers()
         .iter()
+        .filter(|(key, _)| {
+            matches!(
+                key.as_str(),
+                "content-encoding" | "etag" | "content-length" | "content-range"
+            )
+        })
         .map(|(key, value)| Ok((key.as_str().to_owned(), value.to_str()?.to_owned())))
         .collect::<Result<BTreeMap<_, _>>>()?;
     Ok(Response {
