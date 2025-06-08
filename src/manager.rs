@@ -27,6 +27,7 @@ pub struct Snapshot {
     pub update: UpdateStatus,
     pub stopping: bool,
     pub stopped: bool,
+    pub last_add_result: Option<(u64, Option<String>)>,
 }
 
 impl Default for Snapshot {
@@ -39,6 +40,7 @@ impl Default for Snapshot {
             update: UpdateStatus::Idle,
             stopping: false,
             stopped: false,
+            last_add_result: None,
         }
     }
 }
@@ -217,10 +219,24 @@ fn supervise(
                         }
                     }
                     Command::CheckUpdates | Command::InstallUpdate => {}
-                    other => match apply(other, &mut snapshot.state, &active, &bandwidth) {
-                        Ok(()) => dirty = true,
-                        Err(error) => snapshot.notice = Some(format!("{error:#}")),
-                    },
+                    other => {
+                        let adding = matches!(other, Command::Add { .. });
+                        let result = apply(other, &mut snapshot.state, &active, &bandwidth);
+                        if adding {
+                            let sequence = snapshot
+                                .last_add_result
+                                .as_ref()
+                                .map_or(1, |(sequence, _)| sequence + 1);
+                            snapshot.last_add_result = Some((
+                                sequence,
+                                result.as_ref().err().map(|error| format!("{error:#}")),
+                            ));
+                        }
+                        match result {
+                            Ok(()) => dirty = true,
+                            Err(error) => snapshot.notice = Some(format!("{error:#}")),
+                        }
+                    }
                 }
             }
             Event::Progress(id, progress) => {

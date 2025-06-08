@@ -34,5 +34,6 @@ if ($importRva -ne 0) {
     }
 }
 if ($imports | Where-Object { $_ -match '^(vcruntime|msvcp|ucrtbase|api-ms-win-crt)' }) { throw 'Unexpected dynamic MSVC CRT dependency' }
+if ($imports | Where-Object { $_ -match '^(opengl32|glu32|d3d[0-9]*|dxgi|vulkan-1)\.dll$' }) { throw 'Unexpected GPU graphics dependency in the CPU/GDI build' }
 [PSCustomObject]@{ Path = $Path; Bytes = $bytes.Length; Machine = 'x64'; Subsystem = 'Windows GUI'; Imports = @($imports | Sort-Object -Unique) } | ConvertTo-Json -Depth 3
 
