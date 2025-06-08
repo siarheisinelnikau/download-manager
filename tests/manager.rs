@@ -74,3 +74,41 @@ fn coordinator_persists_settings_rejects_second_instance_and_shuts_down() {
     assert_eq!(state.settings.concurrency, 3);
     assert!(!state.settings.startup_update_check);
 }
+
+#[test]
+fn repeated_add_errors_have_distinct_acknowledgements() {
+    let dir = support::fixture_dir();
+    let state = State {
+        settings: Settings {
+            startup_update_check: false,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    storage::atomic_json(&dir.path().join("state.json"), &state).unwrap();
+    let (tx, rx) = mpsc::channel();
+    let manager = Manager::start(
+        dir.path().to_path_buf(),
+        Arc::new(move || {
+            let _ = tx.send(());
+        }),
+    );
+    wait(&manager, &rx, |s| s.ready);
+    for expected in 1..=2 {
+        manager
+            .send(Command::Add {
+                url: "invalid link".into(),
+                directory: dir.path().to_path_buf(),
+                filename: "sample.zip".into(),
+            })
+            .unwrap();
+        wait(&manager, &rx, |s| {
+            s.last_add_result
+                .as_ref()
+                .is_some_and(|(sequence, error)| *sequence == expected && error.is_some())
+        });
+        assert!(manager.snapshot().state.downloads.is_empty());
+    }
+    manager.send(Command::Shutdown).unwrap();
+    wait(&manager, &rx, |s| s.stopped);
+}

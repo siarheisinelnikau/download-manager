@@ -28,6 +28,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
+    if args.get(1).is_some_and(|a| a == "--capture-ui") {
+        if !matches!(args.len(), 4 | 6) {
+            return Err(
+                "Usage: --capture-ui main|settings OUTPUT.png [WIDTH HEIGHT] (requires DOWNLOAD_MANAGER_DATA_DIR)"
+                    .into(),
+            );
+        }
+        if std::env::var_os("DOWNLOAD_MANAGER_DATA_DIR").is_none() {
+            return Err(
+                "UI capture requires an explicit isolated DOWNLOAD_MANAGER_DATA_DIR".into(),
+            );
+        }
+        let view = args[2].to_str().ok_or("Invalid capture view")?;
+        if !matches!(view, "main" | "settings") {
+            return Err("Capture view must be main or settings".into());
+        }
+        let size = if args.len() == 6 {
+            let width: u32 = args[4].to_str().ok_or("Invalid width")?.parse()?;
+            let height: u32 = args[5].to_str().ok_or("Invalid height")?.parse()?;
+            if !(760..=1920).contains(&width) || !(540..=1080).contains(&height) {
+                return Err("Capture size must be 760..1920 by 540..1080 logical pixels".into());
+            }
+            Some((width, height))
+        } else {
+            None
+        };
+        return window::run_capture(view == "settings", std::path::PathBuf::from(&args[3]), size);
+    }
+    if args.get(1).is_some_and(|a| a == "--diagnose-ui") {
+        if args.len() != 4 || std::env::var_os("DOWNLOAD_MANAGER_DATA_DIR").is_none() {
+            return Err("Usage: --diagnose-ui main|settings OUTPUT.json (requires DOWNLOAD_MANAGER_DATA_DIR)".into());
+        }
+        let view = args[2].to_str().ok_or("Invalid diagnostic view")?;
+        if !matches!(view, "main" | "settings") {
+            return Err("Diagnostic view must be main or settings".into());
+        }
+        return window::run_diagnostic(view == "settings", std::path::PathBuf::from(&args[3]));
+    }
     if args.len() > 1 {
         return Err("Unknown command-line option".into());
     }
