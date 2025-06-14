@@ -22,6 +22,7 @@ enum UserEvent {
 
 #[derive(Clone, Copy, Default, serde::Serialize)]
 struct Counters {
+    native_changes: u64,
     layouts: u64,
     rasters: u64,
     presents: u64,
@@ -30,6 +31,7 @@ struct Counters {
 impl Counters {
     fn since(self, old: Self) -> Self {
         Self {
+            native_changes: self.native_changes - old.native_changes,
             layouts: self.layouts - old.layouts,
             rasters: self.rasters - old.rasters,
             presents: self.presents - old.presents,
@@ -118,9 +120,9 @@ impl Capture {
 const PHASES: [(&str, u64); 5] = [
     ("visible_settle", 2),
     ("visible_idle", 5),
-    ("minimized", 3),
+    ("hidden", 3),
     ("restored_settle", 2),
-    ("restored_idle", 3),
+    ("restored_idle", 5),
 ];
 struct Diagnostic {
     path: PathBuf,
@@ -134,6 +136,7 @@ struct Diagnostic {
     samples: Vec<serde_json::Value>,
     repaint_causes: std::collections::BTreeMap<String, u64>,
     native_events: std::collections::BTreeMap<String, u64>,
+    idle_retries: u8,
 }
 impl Diagnostic {
     fn new(path: PathBuf, settings: bool) -> Self {
@@ -149,6 +152,7 @@ impl Diagnostic {
             samples: Vec::new(),
             repaint_causes: Default::default(),
             native_events: Default::default(),
+            idle_retries: 0,
         }
     }
     fn start(&mut self, counters: Counters) {
@@ -160,40 +164,58 @@ impl Diagnostic {
     fn advance(&mut self, counters: Counters, window: &Window) -> bool {
         let elapsed = self.started.elapsed().as_secs_f64();
         let cpu = cpu_seconds();
-        self.samples.push(serde_json::json!({"state":PHASES[self.phase].0, "seconds":elapsed, "counts":counters.since(self.baseline),
+        let changed =
+            matches!(self.phase, 1 | 4) && counters.since(self.baseline).native_changes > 0;
+        let state = if changed {
+            PHASES[self.phase].0.replace("_idle", "_native_activity")
+        } else {
+            PHASES[self.phase].0.to_owned()
+        };
+        self.samples.push(serde_json::json!({"state":state, "seconds":elapsed, "counts":counters.since(self.baseline),
             "cpu_one_core_percent": self.cpu.zip(cpu).map(|(before,after)|100.0*(after-before)/elapsed), "minimized":window.is_minimized(), "visible":window.is_visible()}));
+        if changed && self.idle_retries == 0 {
+            self.idle_retries = 1;
+            self.start(counters);
+            return false;
+        }
+        self.idle_retries = 0;
         self.phase += 1;
         if self.phase == PHASES.len() {
             self.next = None;
             return true;
         }
         if self.phase == 2 {
-            window.set_minimized(true);
+            window.set_visible(false);
         }
         if self.phase == 3 {
-            window.set_minimized(false);
+            window.set_visible(true);
         }
         self.start(counters);
         false
     }
     fn report(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let gate = self
+        let quiet_visible: Vec<_> = self
             .samples
             .iter()
             .filter(|s| {
-                matches!(
-                    s["state"].as_str(),
-                    Some("visible_idle" | "minimized" | "restored_idle")
-                )
+                matches!(s["state"].as_str(), Some("visible_idle" | "restored_idle"))
+                    && s["counts"]["native_changes"] == 0
             })
-            .all(|s| {
-                s["counts"]["layouts"] == 0
+            .collect();
+        let gate = !quiet_visible.is_empty()
+            && quiet_visible.iter().all(|s| {
+                s["counts"]["layouts"] == 0 && s["counts"]["rasters"] == 0 && s["visible"] == true
+            })
+            && self.samples.iter().any(|s| {
+                s["state"] == "hidden"
+                    && s["visible"] == false
+                    && s["counts"]["layouts"] == 0
                     && s["counts"]["rasters"] == 0
-                    && (s["state"] != "minimized" || s["counts"]["presents"] == 0)
+                    && s["counts"]["presents"] == 0
             });
         let report = serde_json::json!({"renderer":"egui CPU rasterizer -> softbuffer Win32 GDI BitBlt", "executable":std::env::current_exe()?, "pid":std::process::id(),
             "settings_page":self.settings,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
-            "limitations":"No keyboard/mouse automation or GPU telemetry. Lifecycle transitions are initiated by the application. Perceived desktop stutter needs user confirmation."});
+            "limitations":"No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."});
         std::fs::write(&self.path, serde_json::to_vec_pretty(&report)?)?;
         Ok(())
     }
@@ -465,11 +487,15 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             let window = Arc::new(
                 event_loop.create_window(
                     Window::default_attributes()
+                        .with_active(self.diagnostic.is_none())
                         .with_title("DownloadManager")
                         .with_inner_size(LogicalSize::new(self.size.0, self.size.1))
                         .with_min_inner_size(LogicalSize::new(760, 540)),
                 )?,
             );
+            if self.diagnostic.is_some() {
+                window.set_cursor_hittest(false)?;
+            }
             let context = softbuffer::Context::new(window.clone())?;
             self.surface = Some(softbuffer::Surface::new(&context, window.clone())?);
             self.input = Some(egui_winit::State::new(
@@ -513,6 +539,17 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             return;
         }
         let response = self.input.as_mut().unwrap().on_window_event(window, &event);
+        if matches!(
+            &event,
+            WindowEvent::Focused(_)
+                | WindowEvent::Resized(_)
+                | WindowEvent::CursorMoved { .. }
+                | WindowEvent::KeyboardInput { .. }
+                | WindowEvent::MouseInput { .. }
+                | WindowEvent::MouseWheel { .. }
+        ) {
+            self.counters.native_changes += 1;
+        }
         if let Some(d) = &mut self.diagnostic {
             let name = match &event {
                 WindowEvent::RedrawRequested => "Redraw",
