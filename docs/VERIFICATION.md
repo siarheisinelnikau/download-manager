@@ -1,36 +1,49 @@
 # Verification record
 
-Development date: 2026-10-31 (Europe/Minsk). Repository-only unattended session. No application GUI, updater, screenshots, real user downloads, remote Git operations or publication were run.
+Date: 2026-10-31 (Europe/Minsk). All work and synthetic application data stayed inside this repository. Nothing was published. The final design review uses application-generated images and native diagnostics, without Computer Use.
 
-## Completed
+## Build and functional checks
 
-- Rust 1.96.1, host `x86_64-pc-windows-msvc`; Cargo uses two jobs and repository-local output.
-- `cargo check --offline --all-targets`: passed, including the native UI, Windows file API calls and updater helper code.
-- `cargo clippy --offline --all-targets -- -D warnings`: passed. Sandbox incremental-cache hard-link warnings can occur; Cargo falls back to copying.
-- `./scripts/check.ps1 -Offline`: passed formatting, Clippy with warnings denied, and all **21** offline tests on the final source.
-- `cargo test --offline --locked --features loopback-tests --test downloads --no-run`: passed compilation of the nine optional HTTP transport tests without executing them.
-- `cargo clippy --offline --locked --features loopback-tests --all-targets -- -D warnings`: passed including the optional socket-test source.
-- `./scripts/package.ps1 -Offline -SkipChecks`: built the optimized Windows x64 portable EXE with a static CRT and generated its SHA-256, release notes and dependency notices.
-- `./scripts/inspect-package.ps1`: confirmed an x64 PE32+ Windows GUI executable, with system DLL imports and no direct dynamic MSVC CRT dependency. No GUI process was started. Clean-machine deployment remains a manual check.
-- Final local artifact: `dist/DownloadManager-v0.1.0.exe`, 7,574,016 bytes. SHA-256: `25458cee3f19b07e8c0703bc9fc47633a27d77401deab081c5b30811f58f8a0f`.
-- Offline engine fixtures cover known/unknown length, interrupted body checkpointing, exact Range/If-Range, changed ETag/redirect/length, missing or weak validators, invalid/missing ranges, HTTP 200/416 on resume, encoding/downgrade rejection, edited prefix, uncommitted tail, pause/cancel, shared limiter delay, destination collision and completion-receipt recovery.
-- State/coordinator tests cover atomic state replacement, paused restart, startup-check opt-out, corrupt/future state preservation, filename/URL rules, worker pause signaling, second-instance lock, durable settings and orderly shutdown.
-- Updater tests cover canonical URL selection, exact SHA-256 entry matching, malformed/duplicate hashes, semver comparison and stable-channel filtering. No update request/install was executed.
+- Rust 1.96.1, `x86_64-pc-windows-msvc`, two Cargo jobs and repository-local output.
+- `./scripts/check.ps1 -Offline`: formatting, Clippy with warnings denied and 22 offline tests pass.
+- Coverage includes conservative Range/If-Range resume, changed resources, short/error bodies, validator rejection, prefix hashes, checkpoint tails, pause/cancel, rate limiting, protected finalization, completion receipts, persistence, instance locking, update metadata and repeated add-error acknowledgements.
+- The optimized portable build uses a static CRT. `inspect-package.ps1` confirms x64/Windows GUI, system DLL imports, no direct dynamic MSVC CRT dependency and no OpenGL/DirectX/Vulkan graphics import. The source/dependency graph confirms egui CPU rasterization through softbuffer's Win32 GDI BitBlt path.
 
-## Environment limits observed
+## Design and actual screenshots
 
-- Online Cargo dependency resolution failed while initializing DNS (`getaddrinfo() thread failed to start`). The existing cache was sufficient for the pinned eframe 0.33.3 build and lockfile. No elevation or alternate authentication was attempted.
-- Loopback server tests could bind a local listener, but outgoing requests failed with Windows socket error **10013** (access forbidden). Those tests were not counted as passed. They are behind `loopback-tests`; run `./scripts/check.ps1 -Loopback` on an ordinary developer PC or CI runner.
-- Native atomic moves inside the sandbox's virtual system temp directory failed with access denied. Artificial test directories are now explicitly under this repository's ignored `.test-output`, where the same atomic operations pass. No system temp configuration was changed.
-- The generated dependency notice file flags **13** resolved crate source archives with declared licenses but no bundled license text. The font crate's available OFL/emoji notices are copied recursively; complete the upstream/Ubuntu font notice audit before any public distribution. This is recorded as pending, not claimed as a completed license audit.
+The consumer flow is now New download → link/name/folder → Download, with preserved input on recoverable errors. Pause/resume stays on each row; less frequent queue/restart/cancel actions are grouped under More. Settings is one page, with download defaults, useful limits, installed version and update controls. Save changes remains visible below the scrollable settings body at the minimum window size.
 
-## Required manual review before a public release
+Reviewed PNGs from the packaged executable:
 
-1. Run the packaged EXE on Windows 10 and 11 x64. Exercise Ctrl+V, add/download controls, settings persistence, scrolling, DPI scaling, resize/minimize/restore and close while transferring. Capture real application and settings screenshots for README.
-2. Run the optional loopback suite. Confirm real HTTP redirects, chunked/unknown bodies, ignored/invalid ranges, changing ETags and abrupt disconnect/retry through the actual ureq adapter. Validate HTTPS, certificate/hostname failures and blocked HTTPS-to-HTTP redirects against isolated test endpoints.
-3. Verify multi-file queue ordering/concurrency and bandwidth changes with small controlled files. Measure idle visible/minimized CPU and input/render latency; compilation does not prove responsiveness.
-4. Validate permission-denied and disk-full handling on a disposable volume, process termination at checkpoint/finalization boundaries and recovery after restart. Do not fill a real user/system volume.
-5. After the canonical repository and a test stable release exist, validate manual/startup check behavior, disabled-startup network silence, rate-limit/404 errors, checksum/size mismatch, successful user-initiated install, non-writable app directory, interrupted staging, backup recovery and relaunch with unchanged data. Do not run replacement against a production install during initial validation.
-6. Review dependency notices and complete any missing notices before publication. Inspect the packaged PE imports/static-CRT deployment on a clean machine, consider code signing and verify the published executable/checksum names together.
+- `docs/screenshots/main-window.png`: 960×680, synthetic paused/error queue.
+- `docs/screenshots/settings.png`: 960×680, isolated settings fixture.
+- `.local/gui-smoke/design/empty.png`: empty queue.
+- `.local/gui-smoke/design/settings-small.png`: minimum 760×540 settings layout.
 
-No public release, universal resume support, speed gains, successful graphical smoke test or successful updater lifecycle is claimed by this record.
+All images show the real client area, rendered by the same UI and CPU/GDI backend as normal operation. Each invocation waits for application readiness and two actual rendered frames, writes the PNG atomically, requests normal shutdown and exits successfully. Internal readiness deadline: 5 seconds; external timeout: 8 seconds. No AI images, HTML mockups, desktop-wide captures, native-title-bar claims or live Internet transfer claims are involved. Fixtures use `example.test` URLs and disable startup update requests.
+
+Visual iteration fixed low contrast, competing actions, floating/clipped settings, incorrectly unbounded progress bars, long-name overflow and the save action disappearing below small windows.
+
+## Rendering and lifecycle evidence
+
+The old build used OpenGL. A short warmed sample showed approximately 0% of one core in idle, which did not rule out the user's reported driver/presentation stutter. This is not presented as proof that CPU utilization caused the complaint.
+
+The first CPU/GDI diagnostic caught unnecessary settings redraws: 222 layouts/rasters/presents over a 5-second nominal idle interval, about 10.6% of one core. Native viewport state was not synchronized with egui. Updating native focus/geometry/minimized information before taking input removed that failure in clean samples. Dedicated backend event-loop wakes also repaired a missed close-completion notification after capture. The host retains pixels for unchanged OS invalidations and skips scene construction/rasterization/presentation while hidden or minimized. There is no FPS cap or permanent redraw timer.
+
+`./scripts/review-ui.ps1 -Diagnose` records separate layout, raster, present and native-event counts, plus process CPU in one-core units. It uses finite visible-settle, visible-idle, hidden, restore-settle and restored-idle phases. The disposable window is not activated and disables its own cursor hit-testing to avoid unrelated pointer movement contaminating idle samples. Normal application input is unchanged. Intervals containing native focus/resize/input changes are recorded separately from quiet idle intervals. The watchdog stops unexpected sustained scene work; this does not suppress normal application rendering.
+
+See the committed runtime evidence in `docs/verification/` for the final binary's exact counts and CPU samples. Quiet visible intervals must have zero layouts/rasters; the genuinely hidden interval must have zero layouts/rasters/presents. A restore may produce a necessary fresh frame and must then settle again. These measurements do not certify actual pointer/keyboard latency or universal absence of perceived system-wide stutter; no GPU telemetry was available. Earlier automatic minimize tests were also exercised, but final reproducible diagnostics use explicit hide/restore to avoid unrelated native activation contaminating the hidden phase.
+
+Final results for both the populated queue and settings: 5-second visible idle intervals and 5-second restored idle intervals recorded zero layouts/rasters/presents and 0% of one core. The 3-second hidden intervals also recorded zero work and 0% CPU. Restore presented the retained unchanged bitmap once. The diagnostic can label a native-activity interval and retry it once; the final evidence contains clean intervals for both pages.
+
+Local asset: `dist/DownloadManager-v0.1.0.exe`, 7,336,448 bytes, SHA-256 `8debe8b2a980edb6bb4f230e291890aae593df1579a88922f4752a52902b021a`.
+
+## Remaining checks and environment limits
+
+- Outgoing requests to a synthetic loopback server still fail with Windows socket error 10013. The nine optional HTTP adapter tests compile but are not counted as passed. Run `./scripts/check.ps1 -Loopback` on a permitted developer PC or CI runner; actual HTTP/TLS behavior still needs validation there.
+- Real keyboard traversal, Ctrl+V, pointer/scroll interaction, OS menus, broader DPI scaling and Windows 10/11 compatibility were not certified by screenshots. Computer Use is intentionally excluded from this phase.
+- Validate disk-full/permission failures and abrupt termination on disposable data/volumes, plus actual update checking, download, replacement, recovery and restart against a test published release. No updater installation was executed.
+- Online Cargo/DNS access and atomic moves inside the sandbox's virtual system temp were restricted. Dependencies resolved from cache; fixtures use the repository's ignored test folders, where atomic replacement passes. No system configuration was changed.
+- Eight resolved crate archives lack bundled license texts; the generated dependency notices flag them. Complete upstream and Ubuntu-font notice review before public distribution.
+
+The public-release gate remains incomplete. The local code, native screenshots and documented bounded diagnostics are independently reviewable.

@@ -1,6 +1,6 @@
 # DownloadManager
 
-A native Windows download queue with conservative, checkpointed HTTP(S) resume. Version **0.1.0** is a local first implementation, not a published or interactively validated release.
+A native Windows download queue with conservative, checkpointed HTTP(S) resume. Version **0.1.0** is a local, unpublished implementation with reviewed native screenshots and bounded runtime diagnostics. Full interactive validation is still pending.
 
 Independent MIT-licensed implementation. No affiliation with Internet Download Manager; no competitor source or artwork is used. There is no claim of universal resume support or universal speed improvement.
 
@@ -20,10 +20,10 @@ There is one connection per download. Parallel segments, browser integration, au
 ## Use
 
 1. Start `DownloadManager-v0.1.0.exe` on Windows x64.
-2. Select **Add download**. Paste a URL with Ctrl+V, enter an existing absolute folder path and choose **Save as**. Select **Add to queue**.
-3. Use **Pause**, **Resume**, **Retry / resume**, or **Cancel** on a row. Cancel preserves the managed partial file for recovery.
-4. If the server cannot safely resume, choose **Restart from zero…** and confirm removal of that task's partial data. An existing final file is always protected; add a new task with another filename if necessary.
-5. Open **Settings & updates** to change limits, save the default folder, disable startup checks or check/install an update.
+2. Select **New download** (Ctrl+N). Paste a URL, enter an existing folder path and choose a filename. Select **Download**. Invalid input stays in the form so you can correct it.
+3. Use **Pause**, **Resume**, or **Retry download** on a row. **More** contains the save location, queue reordering and **Cancel download**. Cancel preserves partial data.
+4. If the server cannot safely resume, choose **More → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.
+5. Open **Settings** to change download defaults and limits, save changes, disable startup checks or check/install an update. **Back to downloads** returns to the queue.
 
 Closing the window requests checkpoints and waits for active workers to stop. A pending network read/request can delay closing until its timeout. A state-write error keeps the application open and displays a recovery message.
 
@@ -49,7 +49,7 @@ Helper failures are recorded in `%LOCALAPPDATA%\DownloadManager\updates\last-upd
 
 ## Build and checks
 
-Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visual Studio C++ build tools and Windows SDK. The GUI uses egui/eframe 0.33.3 with OpenGL; a working OpenGL driver is required. Windows 10/11 x64 is the intended target, with interactive compatibility still pending. Other OS/architecture builds are not release targets for v0.1.0.
+Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visual Studio C++ build tools and Windows SDK. The GUI uses egui 0.33.3 with CPU rasterization and Win32 GDI presentation; the executable has no OpenGL/DirectX rendering dependency. Windows 10/11 x64 is the intended target, with broader interactive compatibility still pending. Other OS/architecture builds are not release targets for v0.1.0.
 
 ```powershell
 ./scripts/check.ps1 -Offline
@@ -64,9 +64,22 @@ See [architecture](docs/ARCHITECTURE.md), [verification](docs/VERIFICATION.md) a
 
 ## Screenshots and validation status
 
-**Real application and Settings & updates screenshots are pending.** The unattended development session explicitly prohibited launching a GUI or capturing the desktop. No mock screenshot is substituted and no broken image links are included. Capture both screens from the actual packaged app during the later manual review.
+These are actual client-area bitmaps presented by the packaged Windows application at 960×680 logical pixels. The queue uses synthetic paused/error fixtures; no Internet transfer is implied. The isolated settings fixture disables startup checking; new installations enable it by default.
 
-Automated offline engine, state, coordinator and update-metadata tests pass. Outgoing loopback connections were blocked by the sandbox (Windows socket error 10013); HTTP transport integration tests are provided under `loopback-tests` but were not validated here. Disk-full, power-loss, interactive UI, idle CPU, graphics/clipboard and actual updater lifecycle checks remain pending; see the precise checklist in [VERIFICATION.md](docs/VERIFICATION.md).
+![Download queue with a paused file and a recoverable error](docs/screenshots/main-window.png)
+
+![Settings with download defaults, speed controls and update checking](docs/screenshots/settings.png)
+
+The same interface was reviewed empty and at the minimum 760×540 size. The settings save action stays visible while its content scrolls.
+
+```powershell
+./scripts/review-ui.ps1            # Bounded native render-save-exit captures
+./scripts/review-ui.ps1 -Diagnose  # Isolated visible/hidden/restore measurements
+```
+
+Captures save a complete PNG and exit after readiness and two real frames, with a five-second internal deadline and an eight-second external timeout. They use the same UI and CPU/GDI renderer as normal operation. This verifies the client area, not OS chrome, mouse/keyboard navigation or clipboard behavior. No Computer Use is required. Runtime diagnostics separately count actual layouts, rasters and presentations; screenshots alone do not certify idle behavior.
+
+All 22 offline tests pass. Bounded idle/minimized/restore measurements are recorded in [VERIFICATION.md](docs/VERIFICATION.md). Outgoing loopback requests remain blocked by the sandbox (Windows socket error 10013). Disk-full, power-loss, actual input/clipboard interaction and updater installation still require separate validation.
 
 ## License
 
