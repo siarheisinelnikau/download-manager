@@ -2,11 +2,15 @@
 
 ## Execution model
 
-The native eframe UI only builds controls and sends commands through a bounded channel (64 events). It reads a short-lived snapshot lock; file I/O, state loading/saving, network requests, checksum work and updater staging run outside UI callbacks.
+The native egui UI builds controls and sends commands through a bounded channel (64 events). It reads a short-lived snapshot lock; file I/O, state loading/saving, network requests, checksum work and updater staging run outside normal UI callbacks. Add requests have distinct acknowledgements so repeated errors cannot close the form or strand its pending state.
 
 One coordinator owns the queue, persistent state and the data-directory instance lock. It blocks on channel receive while idle. At most four transfer threads and one update worker are active. Transfer progress is published at approximately 250 ms intervals; redundant progress events can be dropped when the channel is full, while terminal results include the latest progress. Concurrency changes govern new work; already running transfers are allowed to finish or be paused explicitly.
 
-The UI has no permanent repaint timer. Background state changes request a repaint. The external winit host forwards application events and restores `Wait` only when eframe leaves stale `Poll`; explicit `WaitUntil` deadlines remain intact. This addresses the known 0.33 event-loop scheduling mechanism, but idle CPU and input/graphics responsiveness still require measurement on the packaged app.
+The window uses egui CPU tessellation/rasterization through egui_software_backend 0.0.2 and softbuffer 0.4.8's Win32 GDI BitBlt presenter. OpenGL, glutin and wgpu are absent from the shipping dependency graph. Windows desktop composition remains an OS responsibility.
+
+The host waits for native events and actual data changes. Backend notifications have their own event-loop wake, independent of egui's deduplicated repaint callback; this keeps close/save completion working even when no paint is pending. Native viewport focus, size and minimized state are synchronized before each input pass. Cached pixels service unchanged OS repaint requests without reconstructing the scene. Hidden/minimized windows retain dirty state but skip layout, rasterization and presentation. Restore schedules a fresh frame. There is no permanent paint timer, FPS throttle or Poll loop.
+
+Developer-only `--capture-ui main|settings OUTPUT.png [WIDTH HEIGHT]` and `--diagnose-ui main|settings OUTPUT.json` require an explicit isolated data directory. Capture renders two ready frames, saves the bitmap atomically and exits. Diagnostics measure settled visible, hidden and restored states over finite phases; the disposable diagnostic window is not activated and disables its own cursor hit-testing to prevent unrelated pointer motion contaminating idle samples. Native-activity intervals are labeled separately; one bounded retry can obtain a clean idle sample. Normal input behavior is unchanged. These modes do not verify keyboard/mouse interaction or universal absence of perceived stutter.
 
 Closing sends a stop command, pauses waiting tasks and signals all transfer workers. The coordinator persists their results before allowing the window to close. A disk-write failure is visible and defers exit. OS termination/power loss is handled by durable checkpoints rather than a promise of orderly cleanup.
 
@@ -40,5 +44,6 @@ Only a user action launches installation. A verified copy of the new executable 
 
 - [HTTP Range and If-Range semantics (RFC 9110)](https://www.rfc-editor.org/rfc/rfc9110.html#section-14)
 - [ureq 3.5 streaming and timeout API](https://docs.rs/ureq/3.5.0/ureq/)
-- [eframe 0.33.3 source](https://docs.rs/eframe/0.33.3/eframe/)
+- [egui 0.33.3](https://docs.rs/egui/0.33.3/egui/)
+- [softbuffer 0.4.8](https://docs.rs/softbuffer/0.4.8/softbuffer/)
 

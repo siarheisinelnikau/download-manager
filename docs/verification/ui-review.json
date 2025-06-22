@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-31",
+  "code_revision": "faf466e7b70ae0ce71056eefea91fbb016dfc716",
+  "sha256": "8debe8b2a980edb6bb4f230e291890aae593df1579a88922f4752a52902b021a",
+  "renderer": "CPU rasterization and Win32 GDI",
+  "scope": "Real client-area bitmaps from the packaged executable; synthetic fixtures; no Computer Use",
+  "views": [
+    {
+      "logical_height": 680,
+      "fixture": "Synthetic paused/error queue",
+      "logical_width": 960,
+      "image": "docs/screenshots/main-window.png"
+    },
+    {
+      "logical_height": 680,
+      "fixture": "Isolated defaults; startup update checks disabled",
+      "logical_width": 960,
+      "image": "docs/screenshots/settings.png"
+    }
+  ],
+  "other_reviewed_states": [
+    "Empty queue",
+    "Settings at 760x540"
+  ],
+  "ordinary_input_verified": false
+}
