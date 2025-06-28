@@ -1,5 +1,8 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+mod icons;
+mod instance;
+mod tray;
 mod ui;
 mod window;
 
@@ -31,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.get(1).is_some_and(|a| a == "--capture-ui") {
         if !matches!(args.len(), 4 | 6) {
             return Err(
-                "Usage: --capture-ui main|settings OUTPUT.png [WIDTH HEIGHT] (requires DOWNLOAD_MANAGER_DATA_DIR)"
+                "Usage: --capture-ui main|settings|popup OUTPUT.png [WIDTH HEIGHT] (requires DOWNLOAD_MANAGER_DATA_DIR)"
                     .into(),
             );
         }
@@ -41,8 +44,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         let view = args[2].to_str().ok_or("Invalid capture view")?;
-        if !matches!(view, "main" | "settings") {
-            return Err("Capture view must be main or settings".into());
+        if !matches!(view, "main" | "settings" | "popup") {
+            return Err("Capture view must be main, settings or popup".into());
         }
         let size = if args.len() == 6 {
             let width: u32 = args[4].to_str().ok_or("Invalid width")?.parse()?;
@@ -54,17 +57,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             None
         };
-        return window::run_capture(view == "settings", std::path::PathBuf::from(&args[3]), size);
+        return window::run_capture(view, std::path::PathBuf::from(&args[3]), size);
     }
     if args.get(1).is_some_and(|a| a == "--diagnose-ui") {
         if args.len() != 4 || std::env::var_os("DOWNLOAD_MANAGER_DATA_DIR").is_none() {
-            return Err("Usage: --diagnose-ui main|settings OUTPUT.json (requires DOWNLOAD_MANAGER_DATA_DIR)".into());
+            return Err("Usage: --diagnose-ui main|settings|popup|tray OUTPUT.json (requires DOWNLOAD_MANAGER_DATA_DIR)".into());
         }
         let view = args[2].to_str().ok_or("Invalid diagnostic view")?;
-        if !matches!(view, "main" | "settings") {
-            return Err("Diagnostic view must be main or settings".into());
+        if !matches!(view, "main" | "settings" | "popup" | "tray") {
+            return Err("Diagnostic view must be main, settings, popup or tray".into());
         }
-        return window::run_diagnostic(view == "settings", std::path::PathBuf::from(&args[3]));
+        return window::run_diagnostic(view, std::path::PathBuf::from(&args[3]));
+    }
+    if args.get(1).is_some_and(|a| a == "--activate-only") {
+        let _ = instance::acquire(
+            &download_manager::storage::data_directory()?,
+            std::sync::Arc::new(|| {}),
+            true,
+        )?;
+        return Ok(());
+    }
+    if args.get(1).is_some_and(|a| a == "--export-icon") && args.len() == 3 {
+        let path = std::path::PathBuf::from(&args[2]);
+        if path.extension().is_some_and(|e| e == "ico") {
+            std::fs::write(path, icons::ico())?;
+        } else {
+            let mut encoder = png::Encoder::new(std::fs::File::create(path)?, 64, 64);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.write_header()?.write_image_data(&icons::rgba(64))?;
+        }
+        return Ok(());
     }
     if args.len() > 1 {
         return Err("Unknown command-line option".into());

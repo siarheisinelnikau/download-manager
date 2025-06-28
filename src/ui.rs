@@ -19,6 +19,7 @@ const ERROR: Color32 = Color32::from_rgb(166, 47, 51);
 const SUCCESS: Color32 = Color32::from_rgb(29, 111, 77);
 
 pub struct App {
+    icon: egui::TextureHandle,
     manager: Option<Manager>,
     startup_error: Option<String>,
     local_error: Option<String>,
@@ -40,6 +41,11 @@ pub struct App {
 
 impl App {
     pub fn new(ctx: &egui::Context, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
+        let icon = ctx.load_texture(
+            "application-icon",
+            egui::ColorImage::from_rgba_unmultiplied([64, 64], &crate::icons::rgba(64)),
+            egui::TextureOptions::LINEAR,
+        );
         let mut style = (*ctx.style()).clone();
         style.visuals = egui::Visuals::light();
         style.visuals.override_text_color = Some(INK);
@@ -83,6 +89,7 @@ impl App {
             Err(e) => (None, Some(format!("{e:#}"))),
         };
         Self {
+            icon,
             manager,
             startup_error,
             local_error: None,
@@ -118,6 +125,229 @@ impl App {
 
     pub fn ready(&self) -> bool {
         self.manager.as_ref().is_some_and(|m| m.snapshot().ready)
+    }
+
+    pub fn snapshot(&self) -> Snapshot {
+        self.manager
+            .as_ref()
+            .map(Manager::snapshot)
+            .unwrap_or_default()
+    }
+    pub fn show_queue(&mut self) {
+        self.settings_open = false;
+    }
+    pub fn show_new_download(&mut self) {
+        let snapshot = self.snapshot();
+        self.settings_open = false;
+        self.open_add(&snapshot);
+    }
+    pub fn command(&mut self, command: Command) {
+        self.send(command);
+    }
+    pub fn tray_unavailable(&mut self, error: &str) {
+        self.local_error = Some(format!(
+            "System tray unavailable. Closing the window will exit. {error}"
+        ));
+    }
+
+    pub fn popup_size(&self) -> (u32, u32) {
+        let snapshot = self.snapshot();
+        let count = snapshot
+            .state
+            .downloads
+            .iter()
+            .filter(|d| d.status != Status::Completed)
+            .count()
+            .min(4);
+        (400, (232 + count * 124).clamp(300, 600) as u32)
+    }
+
+    pub fn popup(&mut self, ctx: &egui::Context) -> Option<crate::tray::Command> {
+        let snapshot = self.snapshot();
+        let mut action = None;
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+            return Some(crate::tray::Command::Popup { x: 0., y: 0. });
+        }
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::new()
+                    .fill(SURFACE)
+                    .stroke(Stroke::new(1., BORDER))
+                    .inner_margin(16.),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.add(egui::Image::new(&self.icon).fit_to_exact_size(Vec2::splat(24.)));
+                    ui.label(RichText::new("Downloads").size(18.).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Hide").clicked() {
+                            action = Some(crate::tray::Command::Popup { x: 0., y: 0. });
+                        }
+                        if ui
+                            .small_button("+ New")
+                            .on_hover_text("New download")
+                            .clicked()
+                        {
+                            action = Some(crate::tray::Command::NewDownload);
+                        }
+                    });
+                });
+                let active = snapshot
+                    .state
+                    .downloads
+                    .iter()
+                    .filter(|d| d.status == Status::Downloading)
+                    .count();
+                let waiting = snapshot
+                    .state
+                    .downloads
+                    .iter()
+                    .filter(|d| d.status == Status::Queued)
+                    .count();
+                secondary(
+                    ui,
+                    &if active + waiting > 0 {
+                        format!("{active} active · {waiting} waiting")
+                    } else {
+                        "Your downloads, at a glance".into()
+                    },
+                );
+                ui.add_space(2.);
+                ui.separator();
+                let mut jobs: Vec<_> = snapshot
+                    .state
+                    .downloads
+                    .iter()
+                    .filter(|d| d.status != Status::Completed)
+                    .collect();
+                jobs.sort_by_key(|d| match d.status {
+                    Status::Downloading => 0,
+                    Status::Queued => 1,
+                    Status::Pausing => 2,
+                    Status::Paused => 3,
+                    Status::Failed => 4,
+                    _ => 5,
+                });
+                let available = (ui.available_height() - 54.).max(80.);
+                egui::ScrollArea::vertical()
+                    .id_salt("tray_downloads")
+                    .max_height(available)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        if jobs.is_empty() {
+                            ui.add_space(18.);
+                            section(ui, "No downloads waiting");
+                            secondary(ui, "Add a link to start a new download.");
+                        }
+                        for job in jobs.iter().take(4) {
+                            ui.add_space(6.);
+                            ui.horizontal(|ui| {
+                                let width = (ui.available_width() - 92.).max(80.);
+                                ui.allocate_ui_with_layout(
+                                    Vec2::new(width, 28.),
+                                    egui::Layout::left_to_right(egui::Align::Center),
+                                    |ui| {
+                                        ui.add(
+                                            egui::Label::new(
+                                                RichText::new(
+                                                    job.destination
+                                                        .file_name()
+                                                        .unwrap_or_default()
+                                                        .to_string_lossy(),
+                                                )
+                                                .strong(),
+                                            )
+                                            .truncate(),
+                                        )
+                                        .on_hover_text(job.destination.display().to_string());
+                                    },
+                                );
+                                let button = match job.status {
+                                    Status::Downloading | Status::Queued => {
+                                        Some(("Pause", Command::Pause(job.id)))
+                                    }
+                                    Status::Paused | Status::Canceled => {
+                                        Some(("Resume", Command::Resume(job.id)))
+                                    }
+                                    Status::Failed => Some(("Retry", Command::Resume(job.id))),
+                                    _ => None,
+                                };
+                                if let Some((label, command)) = button
+                                    && ui.small_button(label).clicked()
+                                {
+                                    self.send(command);
+                                }
+                            });
+                            let (label, color) = match job.status {
+                                Status::Downloading => {
+                                    (format!("{}/s", bytes(job.speed.max(0.) as u64)), ACCENT)
+                                }
+                                Status::Failed => {
+                                    ("Needs attention · partial file kept".into(), ERROR)
+                                }
+                                Status::Queued => ("Waiting".into(), MUTED),
+                                Status::Pausing => ("Pausing…".into(), MUTED),
+                                Status::Canceled => ("Canceled".into(), MUTED),
+                                _ => ("Paused".into(), MUTED),
+                            };
+                            ui.label(RichText::new(label).size(13.).color(color));
+                            let fraction = job
+                                .total
+                                .filter(|n| *n > 0)
+                                .map(|n| job.bytes as f32 / n as f32)
+                                .unwrap_or(0.)
+                                .clamp(0., 1.);
+                            ui.scope(|ui| {
+                                ui.visuals_mut().extreme_bg_color = BACKGROUND;
+                                ui.add(
+                                    egui::ProgressBar::new(fraction)
+                                        .fill(ACCENT)
+                                        .animate(false)
+                                        .desired_height(5.)
+                                        .desired_width(ui.available_width()),
+                                );
+                            });
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} / {}",
+                                    bytes(job.bytes),
+                                    job.total
+                                        .map(bytes)
+                                        .unwrap_or_else(|| "unknown size".into())
+                                ))
+                                .size(13.)
+                                .color(MUTED),
+                            );
+                            ui.add_space(4.);
+                            ui.separator();
+                        }
+                    });
+                ui.add_space(6.);
+                ui.horizontal(|ui| {
+                    if ui.add(primary("Open downloads")).clicked() {
+                        action = Some(crate::tray::Command::Queue);
+                    }
+                    if ui.button("Settings").clicked() {
+                        action = Some(crate::tray::Command::Settings);
+                    }
+                    ui.menu_button("More", |ui| {
+                        if ui.button("Pause all").clicked() {
+                            self.send(Command::PauseAll);
+                            ui.close();
+                        }
+                        if ui.button("Resume paused").clicked() {
+                            self.send(Command::ResumeAll);
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("Quit DownloadManager").clicked() {
+                            action = Some(crate::tray::Command::Quit);
+                            ui.close();
+                        }
+                    });
+                });
+            });
+        action
     }
 
     pub fn open_settings(&mut self) {
@@ -296,6 +526,9 @@ impl App {
                 }); ui.end_row();
             });
             ui.add_space(14.0); ui.separator(); ui.add_space(8.0);
+            ui.checkbox(&mut self.settings.close_to_tray,"Keep downloads running when the window closes");
+            secondary(ui,"Close hides the window. Use Quit in the tray menu to save and exit.");
+            ui.add_space(8.0);ui.separator();ui.add_space(8.0);
             ui.horizontal(|ui| { section(ui, "Updates"); ui.label(RichText::new(format!("Version {VERSION}")).color(MUTED)); });
             ui.checkbox(&mut self.settings.startup_update_check, "Check for updates when DownloadManager starts");
             let busy = matches!(snapshot.update, UpdateStatus::Checking | UpdateStatus::Downloading { .. } | UpdateStatus::Staged(_));
@@ -496,6 +729,7 @@ impl App {
                     return;
                 }
                 ui.horizontal(|ui| {
+                    ui.add(egui::Image::new(&self.icon).fit_to_exact_size(Vec2::splat(32.)));
                     ui.heading(RichText::new("Downloads").strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui

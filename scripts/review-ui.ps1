@@ -23,6 +23,9 @@ try {
         [System.IO.File]::WriteAllText((Join-Path $stateFolder 'state.json'), ($state | ConvertTo-Json -Depth 8))
     }
     function Invoke-Review([string]$Mode, [string]$View, [string]$Output, [string]$Scenario, [string[]]$Size=@()) {
+        $resolvedOutput = [IO.Path]::GetFullPath($Output)
+        if (-not $resolvedOutput.StartsWith(($repo.TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Review output must remain inside this repository' }
+        if (Test-Path -LiteralPath $resolvedOutput) { Remove-Item -LiteralPath $resolvedOutput -Force }
         $env:DOWNLOAD_MANAGER_DATA_DIR = Join-Path $fixture $Scenario
         $arguments = @($Mode, $View, $Output) + $Size
         $log = Join-Path $fixture (([IO.Path]::GetFileName($Output)) + '.stderr.log')
@@ -35,17 +38,31 @@ try {
         if ($Mode -eq '--diagnose-ui') {
             $report = Get-Content -LiteralPath $Output -Raw | ConvertFrom-Json
             if (-not $report.complete -or -not $report.idle_hidden_render_gate) { throw "Rendering gate failed: $Output" }
+            if ($View -eq 'tray') {
+                if ((Get-Content -LiteralPath $log -Raw) -match 'Error removing system tray icon') { throw 'Native tray icon removal failed' }
+                $registration = $report.samples | Where-Object { $_.state -eq 'tray_registration' }
+                if (-not $registration.shell_icon_rectangle) { throw 'The Windows Shell did not report a registered tray icon' }
+                $cleanup = $report.samples | Where-Object { $_.state -eq 'tray_cleanup' }
+                if (-not $cleanup.tray_created -or -not $cleanup.tray_native_window_destroyed -or -not $cleanup.quit_requested_while_hidden -or $cleanup.duplicate_activation_exit -ne 0) { throw "Tray lifecycle failed: $Output" }
+            }
         }
         Write-Output "Verified exit: $View $Scenario -> $Output"
     }
     if ($Diagnose) {
         Invoke-Review '--diagnose-ui' 'main' (Join-Path $fixture 'runtime-main.json') 'populated'
         Invoke-Review '--diagnose-ui' 'settings' (Join-Path $fixture 'runtime-settings.json') 'empty'
+        Invoke-Review '--diagnose-ui' 'popup' (Join-Path $fixture 'runtime-popup.json') 'populated'
+        Invoke-Review '--diagnose-ui' 'tray' (Join-Path $fixture 'runtime-tray.json') 'populated'
     } else {
         Invoke-Review '--capture-ui' 'main' (Join-Path $screenshots 'main-window.png') 'populated'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $screenshots 'settings.png') 'empty'
+        Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots 'tray-popup.png') 'populated'
         Invoke-Review '--capture-ui' 'main' (Join-Path $fixture 'empty.png') 'empty'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('760','540')
+    }
+    if (-not $Diagnose) {
+        & (Join-Path $repo 'dist/DownloadManager-v0.1.0.exe') --export-icon (Join-Path $screenshots 'application-icon.png')
+        if ($LASTEXITCODE -ne 0) { throw 'Icon export failed' }
     }
 } finally {
     $env:DOWNLOAD_MANAGER_DATA_DIR = $previousData

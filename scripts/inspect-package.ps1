@@ -35,5 +35,40 @@ if ($importRva -ne 0) {
 }
 if ($imports | Where-Object { $_ -match '^(vcruntime|msvcp|ucrtbase|api-ms-win-crt)' }) { throw 'Unexpected dynamic MSVC CRT dependency' }
 if ($imports | Where-Object { $_ -match '^(opengl32|glu32|d3d[0-9]*|dxgi|vulkan-1)\.dll$' }) { throw 'Unexpected GPU graphics dependency in the CPU/GDI build' }
-[PSCustomObject]@{ Path = $Path; Bytes = $bytes.Length; Machine = 'x64'; Subsystem = 'Windows GUI'; Imports = @($imports | Sort-Object -Unique) } | ConvertTo-Json -Depth 3
+$resourceRva = [BitConverter]::ToUInt32($bytes, $optional + 128)
+if ($resourceRva -eq 0) { throw 'Missing Windows application resources' }
+$root = Convert-Rva $resourceRva
+$entryCount = [BitConverter]::ToUInt16($bytes, $root + 12) + [BitConverter]::ToUInt16($bytes, $root + 14)
+$resourceTypes = @()
+for ($index=0; $index -lt $entryCount; $index++) {
+    $id = [BitConverter]::ToUInt32($bytes, $root + 16 + $index * 8)
+    if (($id -band 0x80000000) -eq 0) { $resourceTypes += $id }
+}
+if (3 -notin $resourceTypes -or 14 -notin $resourceTypes -or 16 -notin $resourceTypes) { throw 'Missing icon, icon group or version resource' }
+if (-not ('DownloadManagerPackageIcons' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class DownloadManagerPackageIcons {
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr LoadLibraryExW(string path, IntPtr file, uint flags);
+    [DllImport("kernel32.dll")] public static extern bool FreeLibrary(IntPtr module);
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr LoadImageW(IntPtr module, IntPtr name, uint type, int x, int y, uint flags);
+    [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr icon);
+}
+'@
+}
+# Read resources as data: this never executes the packaged application.
+$module = [DownloadManagerPackageIcons]::LoadLibraryExW([IO.Path]::GetFullPath($Path), [IntPtr]::Zero, 0x22)
+if ($module -eq [IntPtr]::Zero) { throw 'Windows could not load the packaged icon resources' }
+$iconSizes = @(16,24,32,48,64,256)
+try {
+    foreach ($size in $iconSizes) {
+        $icon = [DownloadManagerPackageIcons]::LoadImageW($module, [IntPtr]1, 1, $size, $size, 0)
+        if ($icon -eq [IntPtr]::Zero) { throw "Windows could not decode packaged icon at $size pixels" }
+        [void][DownloadManagerPackageIcons]::DestroyIcon($icon)
+    }
+} finally { [void][DownloadManagerPackageIcons]::FreeLibrary($module) }
+[PSCustomObject]@{ Path = $Path; Bytes = $bytes.Length; Machine = 'x64'; Subsystem = 'Windows GUI'; IconResources = $true; IconDecodedSizes = $iconSizes; Imports = @($imports | Sort-Object -Unique) } | ConvertTo-Json -Depth 3
 
