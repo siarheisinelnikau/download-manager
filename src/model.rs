@@ -47,6 +47,7 @@ pub struct Settings {
     pub bandwidth_kib: u64,
     pub startup_update_check: bool,
     pub default_directory: PathBuf,
+    pub close_to_tray: bool,
 }
 
 impl Default for Settings {
@@ -56,6 +57,7 @@ impl Default for Settings {
             concurrency: 2,
             bandwidth_kib: 0,
             startup_update_check: true,
+            close_to_tray: true,
             default_directory: home
                 .map(PathBuf::from)
                 .unwrap_or_default()

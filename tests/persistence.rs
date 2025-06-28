@@ -13,6 +13,7 @@ fn state_survives_atomic_replacement_and_restarts_paused() {
             startup_update_check: false,
             concurrency: 3,
             bandwidth_kib: 125,
+            close_to_tray: false,
             ..Default::default()
         },
         ..Default::default()
@@ -36,6 +37,7 @@ fn state_survives_atomic_replacement_and_restarts_paused() {
     assert_eq!(restored.settings.bandwidth_kib, 250);
     assert_eq!(restored.settings.concurrency, 3);
     assert!(!restored.settings.startup_update_check);
+    assert!(!restored.settings.close_to_tray);
     assert!(
         restored
             .downloads

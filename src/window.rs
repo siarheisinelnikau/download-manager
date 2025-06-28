@@ -16,6 +16,7 @@ use winit::{
 };
 
 enum UserEvent {
+    Tray(crate::tray::Command),
     BackendChanged,
     Repaint { when: Instant, pass: u64 },
 }
@@ -51,6 +52,7 @@ struct FrameTiming {
 struct Capture {
     path: PathBuf,
     settings: bool,
+    popup: bool,
     opened: bool,
     saved: bool,
     ready_frames: usize,
@@ -58,10 +60,11 @@ struct Capture {
     frames: Vec<FrameTiming>,
 }
 impl Capture {
-    fn new(path: PathBuf, settings: bool) -> Self {
+    fn new(path: PathBuf, view: &str) -> Self {
         Self {
             path,
-            settings,
+            settings: view == "settings",
+            popup: view == "popup",
             opened: false,
             saved: false,
             ready_frames: 0,
@@ -127,6 +130,9 @@ const PHASES: [(&str, u64); 5] = [
 struct Diagnostic {
     path: PathBuf,
     settings: bool,
+    popup: bool,
+    tray: bool,
+    activation: Option<std::process::Child>,
     opened: bool,
     phase: usize,
     started: Instant,
@@ -139,10 +145,13 @@ struct Diagnostic {
     idle_retries: u8,
 }
 impl Diagnostic {
-    fn new(path: PathBuf, settings: bool) -> Self {
+    fn new(path: PathBuf, view: &str) -> Self {
         Self {
             path,
-            settings,
+            settings: view == "settings",
+            popup: view == "popup",
+            tray: view == "tray",
+            activation: None,
             opened: false,
             phase: 0,
             started: Instant::now(),
@@ -202,7 +211,9 @@ impl Diagnostic {
                     && s["counts"]["native_changes"] == 0
             })
             .collect();
-        let gate = !quiet_visible.is_empty()
+        let gate = ["visible_idle", "restored_idle"]
+            .iter()
+            .all(|state| quiet_visible.iter().any(|s| s["state"] == *state))
             && quiet_visible.iter().all(|s| {
                 s["counts"]["layouts"] == 0 && s["counts"]["rasters"] == 0 && s["visible"] == true
             })
@@ -214,7 +225,7 @@ impl Diagnostic {
                     && s["counts"]["presents"] == 0
             });
         let report = serde_json::json!({"renderer":"egui CPU rasterizer -> softbuffer Win32 GDI BitBlt", "executable":std::env::current_exe()?, "pid":std::process::id(),
-            "settings_page":self.settings,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
+            "settings_page":self.settings,"popup":self.popup,"tray_lifecycle":self.tray,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
             "limitations":"No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."});
         std::fs::write(&self.path, serde_json::to_vec_pretty(&report)?)?;
         Ok(())
@@ -257,6 +268,19 @@ fn cpu_seconds() -> Option<f64> {
 }
 
 struct CpuHost {
+    tray: Option<crate::tray::Tray>,
+    tray_sender: Arc<dyn Fn(crate::tray::Command) + Send + Sync>,
+    instance: Option<crate::instance::Instance>,
+    popup: bool,
+    popup_focused: bool,
+    last_popup_dismissed: Option<Instant>,
+    full_geometry: Option<(
+        Option<winit::dpi::PhysicalPosition<i32>>,
+        winit::dpi::PhysicalSize<u32>,
+        bool,
+    )>,
+    popup_anchor: Option<(f64, f64)>,
+    quitting: bool,
     wake: Arc<dyn Fn() + Send + Sync>,
     surface: Option<softbuffer::Surface<Arc<Window>, Arc<Window>>>,
     window: Option<Arc<Window>>,
@@ -277,6 +301,11 @@ struct CpuHost {
 }
 impl CpuHost {
     fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
+        let tray_proxy = proxy.clone();
+        let tray_sender: Arc<dyn Fn(crate::tray::Command) + Send + Sync> =
+            Arc::new(move |command| {
+                let _ = tray_proxy.send_event(UserEvent::Tray(command));
+            });
         let backend_proxy = proxy.clone();
         let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
             let _ = backend_proxy.send_event(UserEvent::BackendChanged);
@@ -293,6 +322,15 @@ impl CpuHost {
             }
         });
         Self {
+            tray: None,
+            tray_sender,
+            instance: None,
+            popup: false,
+            popup_focused: false,
+            last_popup_dismissed: None,
+            full_geometry: None,
+            popup_anchor: None,
+            quitting: false,
             wake,
             surface: None,
             window: None,
@@ -328,6 +366,176 @@ impl CpuHost {
     fn fail(&mut self, event_loop: &ActiveEventLoop, error: impl std::fmt::Display) {
         self.error = Some(error.to_string());
         event_loop.exit();
+    }
+    fn hide_to_tray(&mut self) {
+        if self.popup
+            && self
+                .window
+                .as_ref()
+                .is_some_and(|w| w.is_visible() == Some(true))
+        {
+            self.last_popup_dismissed = Some(Instant::now());
+        }
+        if let Some(window) = &self.window {
+            window.set_visible(false);
+        }
+        self.popup_focused = false;
+        self.deadline = None;
+    }
+    fn restore_full(&mut self) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        if self.popup {
+            self.popup = false;
+            window.set_decorations(true);
+            window.set_resizable(true);
+            window.set_window_level(winit::window::WindowLevel::Normal);
+            window.set_min_inner_size(Some(LogicalSize::new(760, 540)));
+            #[cfg(windows)]
+            {
+                use winit::platform::windows::WindowExtWindows;
+                window.set_skip_taskbar(false);
+            }
+            if let Some((position, size, maximized)) = self.full_geometry.take() {
+                if let Some(position) = position {
+                    window.set_outer_position(position);
+                }
+                let _ = window.request_inner_size(size);
+                window.set_maximized(maximized);
+            }
+            self.ctx.memory_mut(|m| m.reset_areas());
+        }
+        window.set_visible(true);
+        if window.is_minimized() == Some(true) {
+            window.set_minimized(false);
+        }
+        if self.diagnostic.is_none() {
+            window.focus_window();
+        }
+        self.occluded = false;
+        self.schedule(Instant::now());
+    }
+    fn place_popup(&self) {
+        let (Some(window), Some(anchor)) = (&self.window, self.popup_anchor) else {
+            return;
+        };
+        let work = crate::tray::work_area(anchor).unwrap_or((0., 0., 1920., 1080.));
+        let scale = window.scale_factor();
+        let wanted = self.app.as_ref().unwrap().popup_size();
+        let width = (wanted.0 as f64)
+            .min((work.2 - work.0 - 16.) / scale)
+            .max(240.);
+        let height = (wanted.1 as f64)
+            .min((work.3 - work.1 - 16.) / scale)
+            .max(220.);
+        let size = LogicalSize::new(width, height).to_physical::<u32>(scale);
+        if window.inner_size() != size {
+            let _ = window.request_inner_size(size);
+        }
+        let (x, y) =
+            crate::tray::popup_origin(anchor, (size.width as f64, size.height as f64), work);
+        let position = winit::dpi::PhysicalPosition::new(x, y);
+        if window.outer_position().ok() != Some(position) {
+            window.set_outer_position(position);
+        }
+    }
+    fn dispatch_tray(&mut self, event_loop: &ActiveEventLoop, command: crate::tray::Command) {
+        use crate::tray::Command as T;
+        match command {
+            T::Popup { x, y } => {
+                // Windows can dismiss the popup on focus loss before delivering the icon's mouse-up.
+                if self.popup
+                    && self.hidden()
+                    && self
+                        .last_popup_dismissed
+                        .take()
+                        .is_some_and(|at| at.elapsed() < Duration::from_millis(200))
+                {
+                    return;
+                }
+                if self.popup
+                    && self
+                        .window
+                        .as_ref()
+                        .is_some_and(|w| w.is_visible() == Some(true))
+                {
+                    self.hide_to_tray();
+                    return;
+                }
+                let Some(window) = &self.window else {
+                    return;
+                };
+                if !self.popup {
+                    let mut size = window.inner_size();
+                    if size.width < 760 || size.height < 540 {
+                        size = winit::dpi::PhysicalSize::new(960, 680);
+                    }
+                    self.full_geometry =
+                        Some((window.outer_position().ok(), size, window.is_maximized()));
+                }
+                self.popup = true;
+                self.popup_focused = false;
+                self.popup_anchor = Some((x, y));
+                window.set_maximized(false);
+                window.set_minimized(false);
+                window.set_min_inner_size(None::<LogicalSize<u32>>);
+                window.set_decorations(false);
+                window.set_resizable(false);
+                window.set_window_level(winit::window::WindowLevel::AlwaysOnTop);
+                #[cfg(windows)]
+                {
+                    use winit::platform::windows::WindowExtWindows;
+                    window.set_skip_taskbar(true);
+                }
+                let (width, height) = self.app.as_ref().unwrap().popup_size();
+                let work = crate::tray::work_area((x, y)).unwrap_or((0., 0., 1920., 1080.));
+                let scale = window.scale_factor();
+                let width = (width as f64)
+                    .min((work.2 - work.0 - 16.) / scale)
+                    .max(240.);
+                let height = (height as f64)
+                    .min((work.3 - work.1 - 16.) / scale)
+                    .max(220.);
+                let _ = window.request_inner_size(LogicalSize::new(width, height));
+                window.set_visible(true);
+                self.place_popup();
+                if self.diagnostic.is_none() {
+                    window.focus_window();
+                }
+                self.occluded = false;
+                self.ctx.memory_mut(|m| m.reset_areas());
+                self.schedule(Instant::now());
+            }
+            T::Queue => {
+                self.app.as_mut().unwrap().show_queue();
+                self.restore_full();
+            }
+            T::Settings => {
+                self.app.as_mut().unwrap().open_settings();
+                self.restore_full();
+            }
+            T::NewDownload => {
+                self.app.as_mut().unwrap().show_new_download();
+                self.restore_full();
+            }
+            T::PauseAll => self
+                .app
+                .as_mut()
+                .unwrap()
+                .command(download_manager::manager::Command::PauseAll),
+            T::ResumeAll => self
+                .app
+                .as_mut()
+                .unwrap()
+                .command(download_manager::manager::Command::ResumeAll),
+            T::Quit => {
+                self.quitting = true;
+                if self.app.as_mut().unwrap().request_close() {
+                    event_loop.exit();
+                }
+            }
+        }
     }
     fn paint(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn std::error::Error>> {
         if self.hidden() {
@@ -387,9 +595,14 @@ impl CpuHost {
             .get(&egui::ViewportId::ROOT)
             .cloned()
             .unwrap_or_default();
-        let output = self
-            .ctx
-            .run(raw, |ctx| self.app.as_mut().unwrap().update(ctx));
+        let mut popup_action = None;
+        let output = self.ctx.run(raw, |ctx| {
+            if self.popup {
+                popup_action = self.app.as_mut().unwrap().popup(ctx);
+            } else {
+                self.app.as_mut().unwrap().update(ctx);
+            }
+        });
         let ui_end = Instant::now();
         if let Some(d) = &mut self.diagnostic {
             for cause in self.ctx.repaint_causes() {
@@ -475,6 +688,9 @@ impl CpuHost {
         } else if let Some(when) = Instant::now().checked_add(repaint) {
             self.schedule(when);
         }
+        if let Some(action) = popup_action {
+            self.dispatch_tray(event_loop, action);
+        }
         Ok(())
     }
 }
@@ -489,8 +705,19 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                     Window::default_attributes()
                         .with_active(self.diagnostic.is_none())
                         .with_title("DownloadManager")
+                        .with_window_icon(Some(winit::window::Icon::from_rgba(
+                            crate::icons::rgba(64),
+                            64,
+                            64,
+                        )?))
+                        .with_decorations(!self.popup)
+                        .with_resizable(!self.popup)
                         .with_inner_size(LogicalSize::new(self.size.0, self.size.1))
-                        .with_min_inner_size(LogicalSize::new(760, 540)),
+                        .with_min_inner_size(if self.popup {
+                            LogicalSize::new(360, 220)
+                        } else {
+                            LogicalSize::new(760, 540)
+                        }),
                 )?,
             );
             if self.diagnostic.is_some() {
@@ -507,6 +734,20 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                 Some(8192),
             ));
             self.app = Some(crate::ui::App::new(&self.ctx, self.wake.clone()));
+            if self.capture.is_none() && self.diagnostic.as_ref().is_none_or(|d| d.tray) {
+                match crate::tray::Tray::new(self.tray_sender.clone()) {
+                    Ok(tray) => self.tray = Some(tray),
+                    Err(error) => {
+                        if let Some(d) = &mut self.diagnostic {
+                            d.samples.push(serde_json::json!({"state":"tray_unavailable","error":error.to_string()}));
+                        }
+                        self.app
+                            .as_mut()
+                            .unwrap()
+                            .tray_unavailable(&error.to_string());
+                    }
+                }
+            }
             window.request_redraw();
             self.window = Some(window);
             if let Some(d) = &mut self.diagnostic {
@@ -524,7 +765,18 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             return;
         }
         match event {
-            UserEvent::BackendChanged => self.schedule(Instant::now()),
+            UserEvent::Tray(command) => self.dispatch_tray(event_loop, command),
+            UserEvent::BackendChanged => {
+                let snapshot = self.app.as_ref().unwrap().snapshot();
+                if let Some(tray) = &mut self.tray {
+                    tray.update(&snapshot);
+                }
+                if self.quitting && !snapshot.stopping && snapshot.notice.is_some() {
+                    self.quitting = false;
+                    self.restore_full();
+                }
+                self.schedule(Instant::now());
+            }
             UserEvent::Repaint { when, pass } if pass >= self.ctx.cumulative_pass_nr() => {
                 self.schedule(when)
             }
@@ -565,11 +817,30 @@ impl ApplicationHandler<UserEvent> for CpuHost {
         }
         match event {
             WindowEvent::CloseRequested => {
-                if self.app.as_mut().unwrap().request_close() {
-                    event_loop.exit();
+                if self.tray.is_some()
+                    && !self.quitting
+                    && self
+                        .app
+                        .as_ref()
+                        .unwrap()
+                        .snapshot()
+                        .state
+                        .settings
+                        .close_to_tray
+                {
+                    self.hide_to_tray();
                 } else {
-                    self.schedule(Instant::now());
+                    self.dispatch_tray(event_loop, crate::tray::Command::Quit);
                 }
+            }
+            WindowEvent::Focused(true) if self.popup => {
+                self.popup_focused = true;
+                self.schedule(Instant::now());
+            }
+            WindowEvent::Focused(false)
+                if self.popup && self.popup_focused && self.diagnostic.is_none() =>
+            {
+                self.hide_to_tray()
             }
             WindowEvent::RedrawRequested => {
                 self.counters.native_redraws += 1;
@@ -587,6 +858,9 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                 }
             }
             WindowEvent::Resized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                if self.popup {
+                    self.place_popup();
+                }
                 self.schedule(Instant::now())
             }
             _ if response.repaint => self.schedule(Instant::now()),
@@ -621,13 +895,43 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             .and_then(|d| d.next)
             .is_some_and(|t| t <= now)
         {
+            let old_phase = self.diagnostic.as_ref().unwrap().phase;
             let done = self
                 .diagnostic
                 .as_mut()
                 .unwrap()
                 .advance(self.counters, self.window.as_ref().unwrap());
-            if done && self.app.as_mut().unwrap().request_close() {
-                event_loop.exit();
+            if self.diagnostic.as_ref().is_some_and(|d| d.tray) {
+                let phase = self.diagnostic.as_ref().unwrap().phase;
+                if phase != old_phase {
+                    match phase {
+                        1 => {
+                            let anchor = self.tray.as_ref().and_then(|t| t.anchor());
+                            self.diagnostic.as_mut().unwrap().samples.push(
+                                serde_json::json!({"state":"tray_registration","shell_icon_rectangle":anchor.is_some()}),
+                            );
+                            let (x, y) = anchor.unwrap_or((1000., 700.));
+                            self.dispatch_tray(event_loop, crate::tray::Command::Popup { x, y });
+                        }
+                        2 => self.hide_to_tray(),
+                        3 => {
+                            let child =
+                                std::process::Command::new(std::env::current_exe().unwrap())
+                                    .arg("--activate-only")
+                                    .spawn();
+                            self.diagnostic.as_mut().unwrap().activation = child.ok();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if done {
+                if self.diagnostic.as_ref().is_some_and(|d| d.tray) {
+                    self.hide_to_tray();
+                    self.dispatch_tray(event_loop, crate::tray::Command::Quit);
+                } else if self.app.as_mut().unwrap().request_close() {
+                    event_loop.exit();
+                }
             }
         }
         if self.deadline.is_some_and(|t| t <= now) {
@@ -651,14 +955,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     run_mode(None, None, None)
 }
 pub fn run_capture(
-    settings: bool,
+    view: &str,
     path: PathBuf,
     size: Option<(u32, u32)>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    run_mode(Some(Capture::new(path, settings)), None, size)
+    run_mode(Some(Capture::new(path, view)), None, size)
 }
-pub fn run_diagnostic(settings: bool, path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    run_mode(None, Some(Diagnostic::new(path, settings)), None)
+pub fn run_diagnostic(view: &str, path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    run_mode(None, Some(Diagnostic::new(path, view)), None)
 }
 fn run_mode(
     capture: Option<Capture>,
@@ -670,10 +974,45 @@ fn run_mode(
     let mut host = CpuHost::new(event_loop.create_proxy());
     host.capture = capture;
     host.diagnostic = diagnostic;
+    host.popup = host.capture.as_ref().is_some_and(|c| c.popup)
+        || host.diagnostic.as_ref().is_some_and(|d| d.popup);
+    if host.popup {
+        host.size = (400, 480);
+    }
+    if host.capture.is_none() && host.diagnostic.as_ref().is_none_or(|d| d.tray) {
+        let sender = host.tray_sender.clone();
+        match crate::instance::acquire(
+            &download_manager::storage::data_directory()?,
+            Arc::new(move || sender(crate::tray::Command::Queue)),
+            false,
+        )? {
+            crate::instance::Acquisition::Activated => return Ok(()),
+            crate::instance::Acquisition::Primary(instance) => host.instance = Some(instance),
+        }
+    }
     if let Some(size) = size {
         host.size = size;
     }
     event_loop.run_app(&mut host)?;
+    let tray_created = host.tray.is_some();
+    let tray_window = host.tray.as_ref().and_then(|t| t.native_window());
+    drop(host.tray.take());
+    #[cfg(windows)]
+    let tray_window_destroyed = tray_window.is_some_and(
+        |handle| unsafe { windows_sys::Win32::UI::WindowsAndMessaging::IsWindow(handle as _) } == 0,
+    );
+    #[cfg(not(windows))]
+    let tray_window_destroyed = tray_window.is_none();
+    if let Some(d) = &mut host.diagnostic
+        && d.tray
+    {
+        let activation = d
+            .activation
+            .as_mut()
+            .and_then(|child| child.try_wait().ok().flatten())
+            .and_then(|status| status.code());
+        d.samples.push(serde_json::json!({"state":"tray_cleanup","tray_created":tray_created,"tray_dropped":host.tray.is_none(),"tray_native_window_destroyed":tray_window_destroyed,"duplicate_activation_exit":activation,"same_main_window":host.window.is_some(),"quit_requested_while_hidden":host.window.as_ref().is_some_and(|w|w.is_visible()==Some(false))}));
+    }
     if let Some(c) = &host.capture {
         c.report()?;
     }
@@ -682,6 +1021,12 @@ fn run_mode(
     }
     if let Some(error) = host.error {
         return Err(error.into());
+    }
+    if host.diagnostic.as_ref().is_some_and(|d| d.tray) && !tray_created {
+        return Err(
+            "Native tray diagnostic unavailable: Windows rejected tray registration; see report"
+                .into(),
+        );
     }
     if host.capture.as_ref().is_some_and(|c| !c.saved) {
         return Err("No live application frame was captured".into());

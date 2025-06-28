@@ -12,7 +12,7 @@ try {
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add('DownloadManager third-party notices')
     $lines.Add('Generated from Cargo.lock and the local crate sources. Includes build-time dependencies.')
-    foreach ($package in ($metadata.packages | Where-Object { $_.source } | Sort-Object name, version)) {
+    foreach ($package in ($metadata.packages | Where-Object { $_.name -ne 'download-manager' } | Sort-Object name, version)) {
         $lines.Add("`n===== $($package.name) $($package.version) =====")
         $lines.Add("License expression: $($package.license)")
         $lines.Add("Source: $($package.repository)")
