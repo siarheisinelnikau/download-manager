@@ -61,8 +61,9 @@ try {
         Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('760','540')
     }
     if (-not $Diagnose) {
-        & (Join-Path $repo 'dist/DownloadManager-v0.1.0.exe') --export-icon (Join-Path $screenshots 'application-icon.png')
-        if ($LASTEXITCODE -ne 0) { throw 'Icon export failed' }
+        $iconProcess = Start-Process -FilePath (Join-Path $repo 'dist/DownloadManager-v0.1.0.exe') -ArgumentList @('--export-icon', (Join-Path $screenshots 'application-icon.png')) -WindowStyle Hidden -PassThru
+        if (-not $iconProcess.WaitForExit(8000)) { Stop-Process -Id $iconProcess.Id -Force; throw 'Owned icon export timed out' }
+        if ($iconProcess.ExitCode -ne 0) { throw 'Icon export failed' }
     }
 } finally {
     $env:DOWNLOAD_MANAGER_DATA_DIR = $previousData
