@@ -133,6 +133,7 @@ struct Diagnostic {
     popup: bool,
     tray: bool,
     activation: Option<std::process::Child>,
+    window_id: Option<WindowId>,
     opened: bool,
     phase: usize,
     started: Instant,
@@ -152,6 +153,7 @@ impl Diagnostic {
             popup: view == "popup",
             tray: view == "tray",
             activation: None,
+            window_id: None,
             opened: false,
             phase: 0,
             started: Instant::now(),
@@ -196,7 +198,7 @@ impl Diagnostic {
         if self.phase == 2 {
             window.set_visible(false);
         }
-        if self.phase == 3 {
+        if self.phase == 3 && !self.tray {
             window.set_visible(true);
         }
         self.start(counters);
@@ -751,6 +753,7 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             window.request_redraw();
             self.window = Some(window);
             if let Some(d) = &mut self.diagnostic {
+                d.window_id = self.window.as_ref().map(|w| w.id());
                 d.start(self.counters);
             }
             Ok(())
@@ -1011,7 +1014,7 @@ fn run_mode(
             .as_mut()
             .and_then(|child| child.try_wait().ok().flatten())
             .and_then(|status| status.code());
-        d.samples.push(serde_json::json!({"state":"tray_cleanup","tray_created":tray_created,"tray_dropped":host.tray.is_none(),"tray_native_window_destroyed":tray_window_destroyed,"duplicate_activation_exit":activation,"same_main_window":host.window.is_some(),"quit_requested_while_hidden":host.window.as_ref().is_some_and(|w|w.is_visible()==Some(false))}));
+        d.samples.push(serde_json::json!({"state":"tray_cleanup","tray_created":tray_created,"tray_dropped":host.tray.is_none(),"tray_native_window_destroyed":tray_window_destroyed,"duplicate_activation_exit":activation,"same_main_window":d.window_id.is_some() && d.window_id==host.window.as_ref().map(|w|w.id()),"quit_requested_while_hidden":host.window.as_ref().is_some_and(|w|w.is_visible()==Some(false))}));
     }
     if let Some(c) = &host.capture {
         c.report()?;
