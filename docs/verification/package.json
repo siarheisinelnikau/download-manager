@@ -1,0 +1,33 @@
+{
+  "Path": "DownloadManager-v0.1.0.exe",
+  "Bytes": 8032256,
+  "Machine": "x64",
+  "Subsystem": "Windows GUI",
+  "IconResources": true,
+  "IconDecodedSizes": [
+    16,
+    24,
+    32,
+    48,
+    64,
+    256
+  ],
+  "Imports": [
+    "advapi32.dll",
+    "api-ms-win-core-synch-l1-2-0.dll",
+    "bcrypt.dll",
+    "bcryptprimitives.dll",
+    "comctl32.dll",
+    "dwmapi.dll",
+    "gdi32.dll",
+    "imm32.dll",
+    "kernel32.dll",
+    "ntdll.dll",
+    "ole32.dll",
+    "shell32.dll",
+    "USER32.dll",
+    "uxtheme.dll",
+    "ws2_32.dll"
+  ],
+  "sha256": "76c30a7abcbaef5255a2463a800c0ed22f612334b74ca65302fb1e55a3f75805"
+}

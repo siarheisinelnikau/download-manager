@@ -13,6 +13,8 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 - Configure 1–4 simultaneous downloads and a shared bandwidth limit (KiB/s; 0 means unlimited).
 - Keep queue/history and settings across restarts. Unfinished jobs reopen paused; no download resumes without a user action.
 - Review completed downloads separately and remove completed entries from history while keeping their files. Downloaded files are never automatically opened or executed.
+- Keep transfers running in the tray, with a compact download popup, pause/resume/retry actions and a native context menu. A second launch opens the existing instance.
+- Use one consistent application icon in the EXE, window, interface and tray, with embedded sizes from 16 to 256 pixels.
 - Check for stable GitHub releases manually or on startup (enabled by default, persistent opt-out). User-initiated installation verifies SHA-256 and stages a Windows x64 portable update before closing/restarting the application.
 
 There is one connection per download. Parallel segments, browser integration, authentication/cookie management, site extraction and scheduled downloads are outside this version.
@@ -25,7 +27,9 @@ There is one connection per download. Parallel segments, browser integration, au
 4. If the server cannot safely resume, choose **More → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.
 5. Open **Settings** to change download defaults and limits, save changes, disable startup checks or check/install an update. **Back to downloads** returns to the queue.
 
-Closing the window requests checkpoints and waits for active workers to stop. A pending network read/request can delay closing until its timeout. A state-write error keeps the application open and displays a recovery message.
+By default, closing the window keeps downloads running in the tray. Single-click the tray icon to show or hide a compact list of up to four unfinished downloads; **Open downloads** opens the full queue. Double-click opens the queue directly. Right-click opens **New download**, **Pause all**, **Resume paused**, **Settings** and **Quit DownloadManager**. Escape or clicking outside dismisses the popup. Disable **Keep downloads running when the window closes** in Settings to exit on close instead. If Windows refuses tray registration, the application stays accessible in its regular window and closing exits.
+
+**Quit DownloadManager** requests checkpoints and waits for active workers to stop. A pending network read/request can delay exit until its timeout. A state-write error restores the window and displays a recovery message.
 
 ## Reliability rules
 
@@ -39,7 +43,7 @@ Normal TLS certificate/hostname verification remains enabled. HTTPS transfers ca
 
 ## Data and updates
 
-Default state location: `%LOCALAPPDATA%\DownloadManager\state.json`. Set `DOWNLOAD_MANAGER_DATA_DIR` to an absolute isolated directory for development. One instance may own a data directory at a time. URLs and paths are stored locally in plain JSON; URL query strings can contain private tokens. Credentials embedded in URLs are rejected.
+Default state location: `%LOCALAPPDATA%\DownloadManager\state.json`. Set `DOWNLOAD_MANAGER_DATA_DIR` to an absolute isolated directory for development. One instance may own a data directory at a time; another launch signals that instance through Windows named events rather than starting a second queue. URLs and paths are stored locally in plain JSON; URL query strings can contain private tokens. Credentials embedded in URLs are rejected.
 
 Canonical future repository: [siarheisinelnikau/download-manager](https://github.com/siarheisinelnikau/download-manager). It was not created, queried for releases or published during development. A missing repository/release is reported as unavailable, not up to date. Startup no-update results and transient check errors stay in settings without modal dialogs.
 
@@ -64,11 +68,15 @@ See [architecture](docs/ARCHITECTURE.md), [verification](docs/VERIFICATION.md) a
 
 ## Screenshots and validation status
 
-These are actual client-area bitmaps presented by the packaged Windows application at 960×680 logical pixels. The queue uses synthetic paused/error fixtures; no Internet transfer is implied. The isolated settings fixture disables startup checking; new installations enable it by default.
+These are actual client-area bitmaps presented by the packaged Windows application. The full views are 960×680 logical pixels; the compact popup is 400×480. The queue uses synthetic paused/error fixtures; no Internet transfer is implied. The isolated settings fixture disables startup checking; new installations enable it by default.
 
 ![Download queue with a paused file and a recoverable error](docs/screenshots/main-window.png)
 
 ![Settings with download defaults, speed controls and update checking](docs/screenshots/settings.png)
+
+![Compact download popup with resume, retry and full queue actions](docs/screenshots/tray-popup.png)
+
+![Application icon used by the EXE, window and tray](docs/screenshots/application-icon.png)
 
 The same interface was reviewed empty and at the minimum 760×540 size. The settings save action stays visible while its content scrolls.
 
@@ -79,7 +87,7 @@ The same interface was reviewed empty and at the minimum 760×540 size. The sett
 
 Captures save a complete PNG and exit after readiness and two real frames, with a five-second internal deadline and an eight-second external timeout. They use the same UI and CPU/GDI renderer as normal operation. This verifies the client area, not OS chrome, mouse/keyboard navigation or clipboard behavior. No Computer Use is required. Runtime diagnostics separately count actual layouts, rasters and presentations; screenshots alone do not certify idle behavior.
 
-All 22 offline tests pass. Bounded idle/minimized/restore measurements are recorded in [VERIFICATION.md](docs/VERIFICATION.md). Outgoing loopback requests remain blocked by the sandbox (Windows socket error 10013). Disk-full, power-loss, actual input/clipboard interaction and updater installation still require separate validation.
+All 26 offline tests pass. Windows decodes the packaged EXE icon at all six sizes. Bounded idle/hidden/restore measurements are recorded in [VERIFICATION.md](docs/VERIFICATION.md). The sandbox denies native tray registration with Windows error 5, so actual Shell placement and tray mouse/menu gestures remain unverified; the diagnostic reports this as a failure, never a pass. Outgoing loopback requests remain blocked with socket error 10013. Disk-full, power-loss, actual input/clipboard interaction and updater installation still require separate validation.
 
 ## License
 
