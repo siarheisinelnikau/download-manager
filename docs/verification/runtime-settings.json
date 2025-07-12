@@ -1,10 +1,12 @@
 {
-  "date": "2026-10-31",
-  "code_revision": "faf466e7b70ae0ce71056eefea91fbb016dfc716",
+  "date": "2026-11-01",
+  "code_revision": "4f0a0ae4d87e41c7c2310ac654e8dfa941cfb61b",
   "executable": "DownloadManager-v0.1.0.exe",
-  "sha256": "8debe8b2a980edb6bb4f230e291890aae593df1579a88922f4752a52902b021a",
+  "sha256": "76c30a7abcbaef5255a2463a800c0ed22f612334b74ca65302fb1e55a3f75805",
   "renderer": "egui CPU rasterizer -> softbuffer Win32 GDI BitBlt",
   "settings_page": true,
+  "popup": false,
+  "tray_lifecycle": false,
   "complete": true,
   "idle_hidden_render_gate": true,
   "samples": [
@@ -16,9 +18,9 @@
         "presents": 3,
         "rasters": 3
       },
-      "cpu_one_core_percent": 0.7812404688662798,
+      "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 2.0000244,
+      "seconds": 2.0005142,
       "state": "visible_settle",
       "visible": true
     },
@@ -32,7 +34,7 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 5.0002297,
+      "seconds": 5.0004549,
       "state": "visible_idle",
       "visible": true
     },
@@ -46,7 +48,7 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 3.0001287,
+      "seconds": 3.0002962,
       "state": "hidden",
       "visible": false
     },
@@ -58,9 +60,9 @@
         "presents": 1,
         "rasters": 0
       },
-      "cpu_one_core_percent": 0.781162939390405,
+      "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 2.0002229,
+      "seconds": 2.0002815,
       "state": "restored_settle",
       "visible": true
     },
@@ -74,10 +76,14 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 5.0004598,
+      "seconds": 5.0002899,
       "state": "restored_idle",
       "visible": true
     }
   ],
+  "native_events": {
+    "Redraw": 4,
+    "Resized": 3
+  },
   "limitations": "No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."
 }
