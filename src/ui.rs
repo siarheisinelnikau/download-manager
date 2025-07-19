@@ -1,7 +1,9 @@
+use crate::theme::{self, palette};
 use download_manager::{
     manager::{Command, Manager, Snapshot},
     model::{
-        Download, Settings, Status, VERSION, suggested_filename, validate_filename, validate_url,
+        Download, Settings, Status, Theme, VERSION, suggested_filename, validate_filename,
+        validate_url,
     },
     storage,
     updater::UpdateStatus,
@@ -9,17 +11,9 @@ use download_manager::{
 use egui::{Color32, RichText, Stroke, Vec2};
 use std::{path::PathBuf, sync::Arc};
 
-const BACKGROUND: Color32 = Color32::from_rgb(244, 246, 250);
-const SURFACE: Color32 = Color32::WHITE;
-const INK: Color32 = Color32::from_rgb(28, 39, 57);
-const MUTED: Color32 = Color32::from_rgb(83, 99, 120);
-const BORDER: Color32 = Color32::from_rgb(218, 225, 234);
-const ACCENT: Color32 = Color32::from_rgb(33, 99, 209);
-const ERROR: Color32 = Color32::from_rgb(166, 47, 51);
-const SUCCESS: Color32 = Color32::from_rgb(29, 111, 77);
-
 pub struct App {
     icon: egui::TextureHandle,
+    applied_theme: Theme,
     manager: Option<Manager>,
     startup_error: Option<String>,
     local_error: Option<String>,
@@ -47,26 +41,6 @@ impl App {
             egui::TextureOptions::LINEAR,
         );
         let mut style = (*ctx.style()).clone();
-        style.visuals = egui::Visuals::light();
-        style.visuals.override_text_color = Some(INK);
-        style.visuals.panel_fill = BACKGROUND;
-        style.visuals.window_fill = SURFACE;
-        style.visuals.extreme_bg_color = SURFACE;
-        style.visuals.faint_bg_color = BACKGROUND;
-        style.visuals.selection.bg_fill = Color32::from_rgb(219, 233, 255);
-        style.visuals.selection.stroke = Stroke::new(1.0, ACCENT);
-        style.visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, MUTED);
-        style.visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER);
-        style.visuals.widgets.inactive.bg_fill = SURFACE;
-        style.visuals.widgets.inactive.weak_bg_fill = SURFACE;
-        style.visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, BORDER);
-        style.visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, INK);
-        style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(234, 241, 253);
-        style.visuals.widgets.hovered.weak_bg_fill = Color32::from_rgb(234, 241, 253);
-        style.visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, ACCENT);
-        style.visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, INK);
-        style.visuals.widgets.active.bg_fill = Color32::from_rgb(219, 233, 255);
-        style.visuals.widgets.active.fg_stroke = Stroke::new(1.0, INK);
         style.spacing.item_spacing = egui::vec2(12.0, 10.0);
         style.spacing.button_padding = egui::vec2(14.0, 9.0);
         style.spacing.interact_size.y = 34.0;
@@ -84,12 +58,14 @@ impl App {
             .text_styles
             .insert(egui::TextStyle::Heading, egui::FontId::proportional(28.0));
         ctx.set_style(style);
+        theme::apply(ctx, Theme::Dark);
         let (manager, startup_error) = match storage::data_directory() {
             Ok(directory) => (Some(Manager::start(directory, wake)), None),
             Err(e) => (None, Some(format!("{e:#}"))),
         };
         Self {
             icon,
+            applied_theme: Theme::Dark,
             manager,
             startup_error,
             local_error: None,
@@ -164,6 +140,8 @@ impl App {
 
     pub fn popup(&mut self, ctx: &egui::Context) -> Option<crate::tray::Command> {
         let snapshot = self.snapshot();
+        self.sync_theme(ctx, &snapshot);
+        let colors = palette(ctx);
         let mut action = None;
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             return Some(crate::tray::Command::Popup { x: 0., y: 0. });
@@ -171,8 +149,8 @@ impl App {
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::new()
-                    .fill(SURFACE)
-                    .stroke(Stroke::new(1., BORDER))
+                    .fill(colors.surface)
+                    .stroke(Stroke::new(1., colors.border))
                     .inner_margin(16.),
             )
             .show(ctx, |ui| {
@@ -279,16 +257,17 @@ impl App {
                                 }
                             });
                             let (label, color) = match job.status {
-                                Status::Downloading => {
-                                    (format!("{}/s", bytes(job.speed.max(0.) as u64)), ACCENT)
-                                }
+                                Status::Downloading => (
+                                    format!("{}/s", bytes(job.speed.max(0.) as u64)),
+                                    colors.accent,
+                                ),
                                 Status::Failed => {
-                                    ("Needs attention · partial file kept".into(), ERROR)
+                                    ("Needs attention · partial file kept".into(), colors.error)
                                 }
-                                Status::Queued => ("Waiting".into(), MUTED),
-                                Status::Pausing => ("Pausing…".into(), MUTED),
-                                Status::Canceled => ("Canceled".into(), MUTED),
-                                _ => ("Paused".into(), MUTED),
+                                Status::Queued => ("Waiting".into(), colors.muted),
+                                Status::Pausing => ("Pausing…".into(), colors.muted),
+                                Status::Canceled => ("Canceled".into(), colors.muted),
+                                _ => ("Paused".into(), colors.muted),
                             };
                             ui.label(RichText::new(label).size(13.).color(color));
                             let fraction = job
@@ -298,10 +277,10 @@ impl App {
                                 .unwrap_or(0.)
                                 .clamp(0., 1.);
                             ui.scope(|ui| {
-                                ui.visuals_mut().extreme_bg_color = BACKGROUND;
+                                ui.visuals_mut().extreme_bg_color = colors.background;
                                 ui.add(
                                     egui::ProgressBar::new(fraction)
-                                        .fill(ACCENT)
+                                        .fill(colors.accent)
                                         .animate(false)
                                         .desired_height(5.)
                                         .desired_width(ui.available_width()),
@@ -316,7 +295,7 @@ impl App {
                                         .unwrap_or_else(|| "unknown size".into())
                                 ))
                                 .size(13.)
-                                .color(MUTED),
+                                .color(colors.muted),
                             );
                             ui.add_space(4.);
                             ui.separator();
@@ -324,7 +303,7 @@ impl App {
                     });
                 ui.add_space(6.);
                 ui.horizontal(|ui| {
-                    if ui.add(primary("Open downloads")).clicked() {
+                    if ui.add(primary(ui, "Open downloads")).clicked() {
                         action = Some(crate::tray::Command::Queue);
                     }
                     if ui.button("Settings").clicked() {
@@ -356,6 +335,19 @@ impl App {
             self.settings_directory = self.settings.default_directory.display().to_string();
             self.settings_open = true;
             self.saved_settings = false;
+        }
+    }
+
+    fn sync_theme(&mut self, ctx: &egui::Context, snapshot: &Snapshot) {
+        let selected = if self.settings_open {
+            self.settings.theme
+        } else {
+            snapshot.state.settings.theme
+        };
+        if selected != self.applied_theme {
+            theme::apply(ctx, selected);
+            self.applied_theme = selected;
+            ctx.request_repaint();
         }
     }
 
@@ -419,6 +411,7 @@ impl App {
     }
 
     fn add_dialog(&mut self, ctx: &egui::Context, snapshot: &Snapshot) {
+        let colors = palette(ctx);
         if !self.add_open {
             return;
         }
@@ -470,7 +463,7 @@ impl App {
                 "Use an existing folder. Existing files are never replaced.",
             );
             if let Some(error) = &self.form_error {
-                ui.colored_label(ERROR, error);
+                ui.colored_label(colors.error, error);
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
@@ -478,7 +471,7 @@ impl App {
                 if ui
                     .add_enabled(
                         !pending,
-                        primary(if pending { "Adding…" } else { "Download" }),
+                        primary(ui, if pending { "Adding…" } else { "Download" }),
                     )
                     .clicked()
                 {
@@ -498,11 +491,17 @@ impl App {
     }
 
     fn settings_page(&mut self, ui: &mut egui::Ui, snapshot: &Snapshot) {
+        let colors = palette(ui.ctx());
         ui.horizontal(|ui| {
             if ui.button("Back to downloads").clicked() {
                 self.settings_open = false;
             }
             ui.label(RichText::new("Settings").size(28.0).strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.selectable_value(&mut self.settings.theme, Theme::Light, "Light");
+                ui.selectable_value(&mut self.settings.theme, Theme::Dark, "Dark");
+                ui.label("Theme");
+            });
         });
         ui.add_space(10.0);
         let scroll_height = (ui.available_height() - 76.0).max(160.0);
@@ -529,26 +528,26 @@ impl App {
             ui.checkbox(&mut self.settings.close_to_tray,"Keep downloads running when the window closes");
             secondary(ui,"Close hides the window. Use Quit in the tray menu to save and exit.");
             ui.add_space(8.0);ui.separator();ui.add_space(8.0);
-            ui.horizontal(|ui| { section(ui, "Updates"); ui.label(RichText::new(format!("Version {VERSION}")).color(MUTED)); });
+            ui.horizontal(|ui| { section(ui, "Updates"); ui.label(RichText::new(format!("Version {VERSION}")).color(colors.muted)); });
             ui.checkbox(&mut self.settings.startup_update_check, "Check for updates when DownloadManager starts");
             let busy = matches!(snapshot.update, UpdateStatus::Checking | UpdateStatus::Downloading { .. } | UpdateStatus::Staged(_));
             if ui.add_enabled(!busy, egui::Button::new("Check for updates")).clicked() { self.send(Command::CheckUpdates); }
             match &snapshot.update {
                 UpdateStatus::Idle => { secondary(ui, "No update check yet. You can check manually at any time."); }
                 UpdateStatus::Checking => { secondary(ui, "Checking for an update…"); }
-                UpdateStatus::Current => { ui.colored_label(SUCCESS, "You have the latest published version."); }
+                UpdateStatus::Current => { ui.colored_label(colors.success, "You have the latest published version."); }
                 UpdateStatus::Error(error) => {
-                    ui.colored_label(ERROR, "Couldn't check for updates. Try again later.");
+                    ui.colored_label(colors.error, "Couldn't check for updates. Try again later.");
                     egui::CollapsingHeader::new("Error details").show(ui, |ui| { ui.label(error); });
                 }
                 UpdateStatus::Available(release) => {
-                    ui.colored_label(SUCCESS, format!("Version {} is available.", release.version));
+                    ui.colored_label(colors.success, format!("Version {} is available.", release.version));
                     secondary(ui, "Your downloads will pause while the app updates and restarts. Files and settings are kept.");
-                    if ui.add(primary("Download and install")).clicked() { self.send(Command::InstallUpdate); }
+                    if ui.add(primary(ui, "Download and install")).clicked() { self.send(Command::InstallUpdate); }
                 }
                 UpdateStatus::Downloading { bytes: done, total } => {
                     ui.label(format!("Downloading update · {} of {}", bytes(*done), bytes(*total)));
-                    ui.add(egui::ProgressBar::new(*done as f32 / (*total).max(1) as f32).fill(ACCENT).animate(false));
+                    ui.add(egui::ProgressBar::new(*done as f32 / (*total).max(1) as f32).fill(colors.accent).animate(false));
                 }
                 UpdateStatus::Staged(_) => { secondary(ui, "Update verified. Saving your queue before restarting…"); }
             }
@@ -560,11 +559,14 @@ impl App {
         draft.default_directory = PathBuf::from(&self.settings_directory);
         let changed = draft != snapshot.state.settings;
         ui.horizontal(|ui| {
-            if ui.add_enabled(changed, primary("Save changes")).clicked() {
+            if ui
+                .add_enabled(changed, primary(ui, "Save changes"))
+                .clicked()
+            {
                 self.saved_settings = self.send(Command::Settings(draft.clone()));
             }
             if self.saved_settings && !changed && snapshot.notice.is_none() {
-                ui.colored_label(SUCCESS, "Changes saved");
+                ui.colored_label(colors.success, "Changes saved");
             } else if changed {
                 secondary(ui, "Changes haven't been saved yet.");
             }
@@ -572,6 +574,7 @@ impl App {
     }
 
     fn download_row(&mut self, ui: &mut egui::Ui, job: &Download) {
+        let colors = palette(ui.ctx());
         ui.spacing_mut().item_spacing.y = 6.0;
         ui.add_space(8.0);
         let filename = job
@@ -592,13 +595,13 @@ impl App {
                 },
             );
             let (label, color) = match job.status {
-                Status::Queued => ("Waiting", MUTED),
-                Status::Downloading => ("Downloading", ACCENT),
-                Status::Pausing => ("Pausing…", MUTED),
-                Status::Paused => ("Paused", MUTED),
-                Status::Canceled => ("Canceled", MUTED),
-                Status::Failed => ("Needs attention", ERROR),
-                Status::Completed => ("Complete", SUCCESS),
+                Status::Queued => ("Waiting", colors.muted),
+                Status::Downloading => ("Downloading", colors.accent),
+                Status::Pausing => ("Pausing…", colors.muted),
+                Status::Paused => ("Paused", colors.muted),
+                Status::Canceled => ("Canceled", colors.muted),
+                Status::Failed => ("Needs attention", colors.error),
+                Status::Completed => ("Complete", colors.success),
             };
             ui.label(RichText::new(label).color(color).strong());
         });
@@ -606,7 +609,7 @@ impl App {
             .ok()
             .and_then(|url| url.host_str().map(str::to_owned))
             .unwrap_or_else(|| job.url.clone());
-        ui.label(RichText::new(host).color(MUTED).size(13.0))
+        ui.label(RichText::new(host).color(colors.muted).size(13.0))
             .on_hover_text(&job.url);
         let fraction = if job.status == Status::Completed {
             1.0
@@ -618,13 +621,13 @@ impl App {
                 .clamp(0.0, 1.0)
         };
         ui.scope(|ui| {
-            ui.visuals_mut().extreme_bg_color = Color32::from_rgb(231, 236, 244);
+            ui.visuals_mut().extreme_bg_color = colors.track;
             ui.add(
                 egui::ProgressBar::new(fraction)
                     .fill(if job.status == Status::Completed {
-                        SUCCESS
+                        colors.success
                     } else {
-                        ACCENT
+                        colors.accent
                     })
                     .animate(false)
                     .desired_height(6.0)
@@ -651,7 +654,7 @@ impl App {
             }
         });
         if let Some(error) = &job.error {
-            ui.colored_label(ERROR, "Download stopped. Your partial file is kept.");
+            ui.colored_label(colors.error, "Download stopped. Your partial file is kept.");
             egui::CollapsingHeader::new("Details")
                 .id_salt(job.id)
                 .show(ui, |ui| {
@@ -709,6 +712,8 @@ impl App {
             .as_ref()
             .map(Manager::snapshot)
             .unwrap_or_default();
+        self.sync_theme(ctx, &snapshot);
+        let colors = palette(ctx);
         if snapshot.stopped && snapshot.fatal.is_none() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -719,11 +724,15 @@ impl App {
             self.open_add(&snapshot);
         }
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(BACKGROUND).inner_margin(24.0))
+            .frame(
+                egui::Frame::new()
+                    .fill(colors.background)
+                    .inner_margin(24.0),
+            )
             .show(ctx, |ui| {
                 if self.settings_open {
                     if let Some(error) = self.local_error.as_ref().or(snapshot.notice.as_ref()) {
-                        ui.colored_label(ERROR, error);
+                        ui.colored_label(colors.error, error);
                     }
                     self.settings_page(ui, &snapshot);
                     return;
@@ -735,7 +744,7 @@ impl App {
                         if ui
                             .add_enabled(
                                 snapshot.ready && !snapshot.stopping,
-                                primary("+ New download"),
+                                primary(ui, "+ New download"),
                             )
                             .clicked()
                         {
@@ -752,7 +761,7 @@ impl App {
                 secondary(ui, "DownloadManager");
                 ui.add_space(12.0);
                 if let Some(error) = self.startup_error.as_ref().or(snapshot.fatal.as_ref()) {
-                    ui.colored_label(ERROR, "DownloadManager couldn't open your queue.");
+                    ui.colored_label(colors.error, "DownloadManager couldn't open your queue.");
                     ui.label(error);
                     return;
                 }
@@ -761,10 +770,12 @@ impl App {
                     return;
                 }
                 if let Some(error) = self.local_error.as_ref().or(snapshot.notice.as_ref()) {
-                    ui.colored_label(ERROR, error);
+                    ui.colored_label(colors.error, error);
                 }
                 if matches!(snapshot.update, UpdateStatus::Available(_)) {
-                    ui.label(RichText::new("An update is available in Settings.").color(ACCENT));
+                    ui.label(
+                        RichText::new("An update is available in Settings.").color(colors.accent),
+                    );
                 }
                 if snapshot.stopping {
                     secondary(ui, "Saving your downloads before closing…");
@@ -820,31 +831,31 @@ impl App {
                                 ui.allocate_exact_size(Vec2::splat(64.0), egui::Sense::hover());
                             let painter = ui.painter();
                             let center = rect.center();
-                            painter.circle_filled(center, 32.0, Color32::from_rgb(226, 236, 253));
+                            painter.circle_filled(center, 32.0, colors.badge);
                             painter.line_segment(
                                 [
                                     center - egui::vec2(0.0, 15.0),
                                     center + egui::vec2(0.0, 7.0),
                                 ],
-                                Stroke::new(3.0, ACCENT),
+                                Stroke::new(3.0, colors.accent),
                             );
                             painter.line_segment(
                                 [
                                     center + egui::vec2(-8.0, 0.0),
                                     center + egui::vec2(0.0, 8.0),
                                 ],
-                                Stroke::new(3.0, ACCENT),
+                                Stroke::new(3.0, colors.accent),
                             );
                             painter.line_segment(
                                 [center + egui::vec2(8.0, 0.0), center + egui::vec2(0.0, 8.0)],
-                                Stroke::new(3.0, ACCENT),
+                                Stroke::new(3.0, colors.accent),
                             );
                             painter.line_segment(
                                 [
                                     center + egui::vec2(-12.0, 18.0),
                                     center + egui::vec2(12.0, 18.0),
                                 ],
-                                Stroke::new(3.0, ACCENT),
+                                Stroke::new(3.0, colors.accent),
                             );
                             ui.add_space(12.0);
                             ui.label(
@@ -875,10 +886,10 @@ impl App {
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
                                 egui::Frame::new()
-                                    .fill(SURFACE)
+                                    .fill(colors.surface)
                                     .inner_margin(18.0)
                                     .corner_radius(8.0)
-                                    .stroke(Stroke::new(1.0, BORDER))
+                                    .stroke(Stroke::new(1.0, colors.border))
                                     .show(ui, |ui| {
                                         ui.set_width(ui.available_width());
                                         for (index, job) in jobs.iter().enumerate() {
@@ -898,7 +909,7 @@ impl App {
                 ui.set_max_width(440.0); ui.heading("Restart from the beginning?");
                 ui.label("This discards this download's partial file and downloads it again. Existing completed files are kept.");
                 ui.horizontal(|ui| {
-                    if ui.add(primary("Restart download")).clicked() { self.send(Command::Restart(id)); self.restart = None; }
+                    if ui.add(primary(ui, "Restart download")).clicked() { self.send(Command::Restart(id)); self.restart = None; }
                     if ui.button("Keep partial file").clicked() { self.restart = None; }
                 });
             });
@@ -906,17 +917,20 @@ impl App {
                 self.restart = None;
             }
         }
+        self.sync_theme(ctx, &snapshot);
     }
 }
 
-fn primary(text: &str) -> egui::Button<'_> {
+fn primary<'a>(ui: &egui::Ui, text: &'a str) -> egui::Button<'a> {
+    let colors = palette(ui.ctx());
     egui::Button::new(RichText::new(text).color(Color32::WHITE).strong())
-        .fill(ACCENT)
+        .fill(colors.primary)
         .stroke(Stroke::NONE)
         .corner_radius(6.0)
 }
 fn secondary(ui: &mut egui::Ui, text: &str) {
-    ui.label(RichText::new(text).color(MUTED));
+    let colors = palette(ui.ctx());
+    ui.label(RichText::new(text).color(colors.muted));
 }
 fn section(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).size(18.0).strong());

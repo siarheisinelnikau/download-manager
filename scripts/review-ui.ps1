@@ -1,7 +1,12 @@
-param([switch]$Diagnose)
+param(
+    [switch]$Diagnose,
+    [ValidateSet('Dark','Light')][string]$Theme = 'Dark',
+    [switch]$SkipTray
+)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$fixture = Join-Path $repo '.local/gui-smoke/design'
+$fixture = Join-Path $repo ('.local/gui-smoke/design/' + $Theme.ToLowerInvariant())
+$suffix = if ($Theme -eq 'Light') { '-light' } else { '' }
 $downloads = Join-Path $fixture 'downloads'
 $screenshots = Join-Path $repo 'docs/screenshots'
 $previousData = $env:DOWNLOAD_MANAGER_DATA_DIR
@@ -9,6 +14,8 @@ Push-Location $repo
 try {
     New-Item -ItemType Directory -Force $fixture, $downloads, $screenshots | Out-Null
     $settings = @{concurrency=2; bandwidth_kib=0; startup_update_check=$false; default_directory=$downloads}
+    # Omission also verifies the dark default for existing settings without a theme.
+    if ($Theme -eq 'Light') { $settings.theme = 'Light' }
     foreach ($scenario in @('empty', 'populated')) {
         $stateFolder = Join-Path $fixture $scenario
         New-Item -ItemType Directory -Force $stateFolder | Out-Null
@@ -52,11 +59,11 @@ try {
         Invoke-Review '--diagnose-ui' 'main' (Join-Path $fixture 'runtime-main.json') 'populated'
         Invoke-Review '--diagnose-ui' 'settings' (Join-Path $fixture 'runtime-settings.json') 'empty'
         Invoke-Review '--diagnose-ui' 'popup' (Join-Path $fixture 'runtime-popup.json') 'populated'
-        Invoke-Review '--diagnose-ui' 'tray' (Join-Path $fixture 'runtime-tray.json') 'populated'
+        if (-not $SkipTray) { Invoke-Review '--diagnose-ui' 'tray' (Join-Path $fixture 'runtime-tray.json') 'populated' }
     } else {
-        Invoke-Review '--capture-ui' 'main' (Join-Path $screenshots 'main-window.png') 'populated'
-        Invoke-Review '--capture-ui' 'settings' (Join-Path $screenshots 'settings.png') 'empty'
-        Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots 'tray-popup.png') 'populated'
+        Invoke-Review '--capture-ui' 'main' (Join-Path $screenshots "main-window$suffix.png") 'populated'
+        Invoke-Review '--capture-ui' 'settings' (Join-Path $screenshots "settings$suffix.png") 'empty'
+        Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots "tray-popup$suffix.png") 'populated'
         Invoke-Review '--capture-ui' 'main' (Join-Path $fixture 'empty.png') 'empty'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('760','540')
     }

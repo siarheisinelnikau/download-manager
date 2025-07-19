@@ -2,6 +2,7 @@
 
 mod icons;
 mod instance;
+mod theme;
 mod tray;
 mod ui;
 mod window;
