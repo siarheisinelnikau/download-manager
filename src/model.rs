@@ -40,6 +40,13 @@ impl Download {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Theme {
+    #[default]
+    Dark,
+    Light,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -48,6 +55,7 @@ pub struct Settings {
     pub startup_update_check: bool,
     pub default_directory: PathBuf,
     pub close_to_tray: bool,
+    pub theme: Theme,
 }
 
 impl Default for Settings {
@@ -58,6 +66,7 @@ impl Default for Settings {
             bandwidth_kib: 0,
             startup_update_check: true,
             close_to_tray: true,
+            theme: Theme::Dark,
             default_directory: home
                 .map(PathBuf::from)
                 .unwrap_or_default()

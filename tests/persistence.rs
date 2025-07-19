@@ -1,5 +1,5 @@
 use download_manager::{
-    model::{Download, Settings, State, Status, validate_filename, validate_url},
+    model::{Download, Settings, State, Status, Theme, validate_filename, validate_url},
     storage,
 };
 mod support;
@@ -14,6 +14,7 @@ fn state_survives_atomic_replacement_and_restarts_paused() {
             concurrency: 3,
             bandwidth_kib: 125,
             close_to_tray: false,
+            theme: Theme::Light,
             ..Default::default()
         },
         ..Default::default()
@@ -38,12 +39,27 @@ fn state_survives_atomic_replacement_and_restarts_paused() {
     assert_eq!(restored.settings.concurrency, 3);
     assert!(!restored.settings.startup_update_check);
     assert!(!restored.settings.close_to_tray);
+    assert_eq!(restored.settings.theme, Theme::Light);
     assert!(
         restored
             .downloads
             .iter()
             .all(|j| j.status == Status::Paused && j.bytes == 100)
     );
+}
+
+#[test]
+fn existing_settings_without_a_theme_use_dark_and_keep_other_preferences() {
+    let dir = support::fixture_dir();
+    let mut value = serde_json::to_value(State::default()).unwrap();
+    value["settings"].as_object_mut().unwrap().remove("theme");
+    value["settings"]["bandwidth_kib"] = 512.into();
+    value["settings"]["startup_update_check"] = false.into();
+    storage::atomic_json(&dir.path().join("state.json"), &value).unwrap();
+    let state = storage::load_state(dir.path()).unwrap();
+    assert_eq!(state.settings.theme, Theme::Dark);
+    assert_eq!(state.settings.bandwidth_kib, 512);
+    assert!(!state.settings.startup_update_check);
 }
 
 #[test]

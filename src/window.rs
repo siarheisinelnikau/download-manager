@@ -283,6 +283,7 @@ struct CpuHost {
     )>,
     popup_anchor: Option<(f64, f64)>,
     quitting: bool,
+    window_theme: Option<winit::window::Theme>,
     wake: Arc<dyn Fn() + Send + Sync>,
     surface: Option<softbuffer::Surface<Arc<Window>, Arc<Window>>>,
     window: Option<Arc<Window>>,
@@ -333,6 +334,7 @@ impl CpuHost {
             full_geometry: None,
             popup_anchor: None,
             quitting: false,
+            window_theme: None,
             wake,
             surface: None,
             window: None,
@@ -606,6 +608,15 @@ impl CpuHost {
             }
         });
         let ui_end = Instant::now();
+        let native_theme = if self.ctx.style().visuals.dark_mode {
+            winit::window::Theme::Dark
+        } else {
+            winit::window::Theme::Light
+        };
+        if self.window_theme != Some(native_theme) {
+            window.set_theme(Some(native_theme));
+            self.window_theme = Some(native_theme);
+        }
         if let Some(d) = &mut self.diagnostic {
             for cause in self.ctx.repaint_causes() {
                 *d.repaint_causes.entry(cause.to_string()).or_default() += 1;
@@ -707,6 +718,7 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                     Window::default_attributes()
                         .with_active(self.diagnostic.is_none())
                         .with_title("DownloadManager")
+                        .with_theme(Some(winit::window::Theme::Dark))
                         .with_window_icon(Some(winit::window::Icon::from_rgba(
                             crate::icons::rgba(64),
                             64,
