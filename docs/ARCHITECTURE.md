@@ -24,6 +24,12 @@ One code-native icon produces the RGBA window/tray texture and the multiresoluti
 
 OS termination/power loss is handled by durable checkpoints rather than a promise of orderly cleanup.
 
+## Appearance
+
+`Settings.theme` persists the explicit Dark/Light choice and defaults to Dark for new and older state files. One semantic palette in `src/theme.rs` supplies surfaces, text, borders, selection, status colors, progress tracks and primary actions for every application view. A settings draft previews immediately and is persisted through the existing Save changes action; leaving settings restores the saved choice. The native window receives the matching theme request.
+
+The style and native-theme requests run only when the selected theme changes. One bounded repaint applies the new appearance; there is no theme polling or animation timer. The theme-aware review script uses isolated fixtures for both palettes and can explicitly skip the separately blocked Shell tray test.
+
 ## File protocol
 
 `Download.destination` is an absolute path under an existing canonicalized directory. Reserved Windows filenames, path components, alternate-stream syntax, control characters and managed filenames are rejected. The UI never derives a writable path from Content-Disposition or a redirect. Duplicate destinations in queue/history are rejected case-insensitively.
