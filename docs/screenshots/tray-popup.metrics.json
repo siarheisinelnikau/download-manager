@@ -3,20 +3,20 @@
   "frame_count": 2,
   "frames": [
     {
-      "present_ms": 0.2092,
-      "raster_ms": 1.5372000000000001,
-      "total_ms": 3.1342000000000003,
-      "ui_ms": 1.3878
+      "present_ms": 0.1963,
+      "raster_ms": 1.8182,
+      "total_ms": 3.0810999999999997,
+      "ui_ms": 1.0666
     },
     {
-      "present_ms": 0.1425,
-      "raster_ms": 0.20729999999999998,
-      "total_ms": 0.455,
-      "ui_ms": 0.1052
+      "present_ms": 0.09179999999999999,
+      "raster_ms": 0.1385,
+      "total_ms": 0.337,
+      "ui_ms": 0.1067
     }
   ],
-  "median_total_ms": 0.455,
-  "p95_total_ms": 0.455,
+  "median_total_ms": 0.337,
+  "p95_total_ms": 0.337,
   "renderer": "CPU rasterizer / Win32 GDI",
   "scope": "Native client area; actual presented pixels"
 }

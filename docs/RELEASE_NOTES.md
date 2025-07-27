@@ -17,6 +17,7 @@ First implementation of an independent native Windows download manager. No prece
 - A compact tray download popup with per-file pause/resume/retry, a native context menu, optional keep-running-on-close behavior and duplicate-launch activation of the existing instance.
 - A consistent original application icon embedded in the EXE at six sizes and used by the window, interface and tray. Packaging verifies that Windows can decode the final icon resources.
 - Explicit handling of rejected tray registration, keeping the regular window accessible instead of hiding behind an unavailable icon.
+- Dark and light themes shared by the full queue, settings, dialogs and compact popup. Dark is the default for new and older settings; the selected theme previews immediately and persists after Save changes.
 
 ## Platform and assets
 
@@ -24,6 +25,6 @@ Intended for Windows 10/11 x64. The portable MSVC build uses a static CRT and CP
 
 ## Known limitations and validation
 
-This is a local, unpublished implementation. All 26 offline tests, native client-area screenshots, packaged icon decoding and bounded rendering diagnostics are verified. The sandbox rejects native tray registration with Windows error 5; actual Shell placement, tray cleanup and mouse/menu gestures need validation on an unrestricted desktop. Actual keyboard/clipboard interaction, real HTTP/TLS transport, broader platform compatibility and update installation/restart remain pending. Sandbox policy blocks outgoing loopback sockets. Screenshot fixtures use synthetic data; they do not demonstrate live Internet downloads.
+This is a local, unpublished implementation. All 27 offline tests, native client-area screenshots, packaged icon decoding and bounded rendering diagnostics are verified. The earlier native tray test was rejected with Windows error 5; actual Shell placement, tray cleanup and mouse/menu gestures need validation on an unrestricted desktop. Actual keyboard/clipboard interaction, real HTTP/TLS transport, broader platform compatibility and update installation/restart remain pending. Sandbox policy blocks outgoing loopback sockets. Screenshot fixtures use synthetic data; they do not demonstrate live Internet downloads.
 
 Resume requires a strong ETag and a valid matching range response. Servers without a strong validator require an explicit restart after interruption. Each file uses a single connection; browser integration, authentication/cookies, scheduled transfers and segmented downloading are not included. Downloads never run automatically. There is no claim of universal acceleration or resume support.

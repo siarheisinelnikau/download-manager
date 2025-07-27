@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-01",
+  "code_revision": "72a804666772afd74f40f0d752d9f083849f427b",
+  "executable": "DownloadManager-v0.1.0.exe",
+  "sha256": "ade76109c9c4dc09234eb4c9e452b7564db6153c4f486756094f36074c40a281",
+  "theme": "Light",
+  "renderer": "egui CPU rasterizer -> softbuffer Win32 GDI BitBlt",
+  "settings_page": false,
+  "popup": false,
+  "tray_lifecycle": false,
+  "complete": true,
+  "idle_hidden_render_gate": true,
+  "samples": [
+    {
+      "counts": {
+        "layouts": 3,
+        "native_changes": 3,
+        "native_redraws": 3,
+        "presents": 3,
+        "rasters": 3
+      },
+      "cpu_one_core_percent": 0.7810973345259669,
+      "minimized": false,
+      "seconds": 2.0003909,
+      "state": "visible_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "minimized": false,
+      "seconds": 5.0001532,
+      "state": "visible_idle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "minimized": false,
+      "seconds": 3.00011,
+      "state": "hidden",
+      "visible": false
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 1,
+        "presents": 1,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "minimized": false,
+      "seconds": 2.0000071,
+      "state": "restored_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "minimized": false,
+      "seconds": 5.0000726,
+      "state": "restored_idle",
+      "visible": true
+    }
+  ],
+  "native_events": {
+    "Redraw": 4,
+    "Resized": 3
+  },
+  "limitations": "No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."
+}

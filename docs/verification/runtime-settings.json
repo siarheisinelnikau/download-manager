@@ -1,8 +1,9 @@
 {
   "date": "2026-11-01",
-  "code_revision": "4f0a0ae4d87e41c7c2310ac654e8dfa941cfb61b",
+  "code_revision": "72a804666772afd74f40f0d752d9f083849f427b",
   "executable": "DownloadManager-v0.1.0.exe",
-  "sha256": "76c30a7abcbaef5255a2463a800c0ed22f612334b74ca65302fb1e55a3f75805",
+  "sha256": "ade76109c9c4dc09234eb4c9e452b7564db6153c4f486756094f36074c40a281",
+  "theme": "Dark",
   "renderer": "egui CPU rasterizer -> softbuffer Win32 GDI BitBlt",
   "settings_page": true,
   "popup": false,
@@ -20,7 +21,7 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 2.0005142,
+      "seconds": 2.0003418,
       "state": "visible_settle",
       "visible": true
     },
@@ -34,7 +35,7 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 5.0004549,
+      "seconds": 5.0000718,
       "state": "visible_idle",
       "visible": true
     },
@@ -48,7 +49,7 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 3.0002962,
+      "seconds": 3.0004201,
       "state": "hidden",
       "visible": false
     },
@@ -62,7 +63,7 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 2.0002815,
+      "seconds": 2.0005812,
       "state": "restored_settle",
       "visible": true
     },
@@ -76,7 +77,7 @@
       },
       "cpu_one_core_percent": 0.0,
       "minimized": false,
-      "seconds": 5.0002899,
+      "seconds": 5.0002567,
       "state": "restored_idle",
       "visible": true
     }

@@ -1,12 +1,12 @@
 # Verification record
 
-Date: 2026-11-01 (Europe/Minsk). All work and synthetic application data stayed inside this repository. Nothing was published. The final design review uses application-generated images and native diagnostics, without Computer Use. Source milestones: `a42319c` and `4f0a0ae`.
+Date: 2026-11-01 (Europe/Minsk). All work and synthetic application data stayed inside this repository. Nothing was published. The design review uses application-generated images and native diagnostics, without Computer Use. Current theme implementation: `72a8046`; preceding tray milestones: `a42319c` and `4f0a0ae`.
 
 ## Build and functional checks
 
 - Rust 1.96.1, `x86_64-pc-windows-msvc`, two Cargo jobs and repository-local output.
-- `./scripts/check.ps1 -Offline`: formatting, Clippy with warnings denied and 26 offline tests pass. The sandbox's incremental-cache hard-link warning falls back to copying; it is not a source warning or test failure.
-- Coverage includes conservative Range/If-Range resume, changed resources, short/error bodies, validator rejection, prefix hashes, checkpoint tails, pause/cancel, rate limiting, protected finalization, completion receipts, persistence (including the close-to-tray preference), instance locking, update metadata, repeated add-error acknowledgements, popup placement, stable tray tooltips and Windows icon decoding.
+- `./scripts/check.ps1 -Offline`: formatting, Clippy with warnings denied and 27 offline tests pass. The sandbox's incremental-cache hard-link warning falls back to copying; it is not a source warning or test failure.
+- Coverage includes conservative Range/If-Range resume, changed resources, short/error bodies, validator rejection, prefix hashes, checkpoint tails, pause/cancel, rate limiting, protected finalization, completion receipts, persistence (including the close-to-tray and Light theme preferences), migration of older settings to Dark without changing other preferences, instance locking, update metadata, repeated add-error acknowledgements, popup placement, stable tray tooltips and Windows icon decoding.
 - The optimized portable build uses a static CRT. `inspect-package.ps1` confirms x64/Windows GUI, system DLL imports, no direct dynamic MSVC CRT dependency and no OpenGL/DirectX/Vulkan graphics import. The source/dependency graph confirms egui CPU rasterization through softbuffer's Win32 GDI BitBlt path.
 - Windows `LoadLibraryExW` (resource-data mode) and `LoadImageW` decode icon group 1 in the final packaged EXE at 16, 24, 32, 48, 64 and 256 pixels. This does not execute the EXE or depend on Explorer's icon cache.
 
@@ -19,13 +19,16 @@ Reviewed PNGs from the packaged executable:
 - `docs/screenshots/main-window.png`: 960×680, synthetic paused/error queue.
 - `docs/screenshots/settings.png`: 960×680, isolated settings fixture.
 - `docs/screenshots/tray-popup.png`: 400×480, the real compact download interface with synthetic paused/error rows.
+- These three primary screenshots use the default Dark palette. Matching `main-window-light.png`, `settings-light.png` and `tray-popup-light.png` show the same screens in Light.
 - `docs/screenshots/application-icon.png`: 64×64 export from the shared code-native icon source.
-- `.local/gui-smoke/design/empty.png`: empty queue.
-- `.local/gui-smoke/design/settings-small.png`: minimum 760×540 settings layout.
+- `.local/gui-smoke/design/dark/empty.png` and `light/empty.png`: empty queue in both themes.
+- `.local/gui-smoke/design/dark/settings-small.png` and `light/settings-small.png`: minimum 760×540 settings layout in both themes.
 
 All images show the real client area, rendered by the same UI and CPU/GDI backend as normal operation. Each invocation waits for application readiness and two actual rendered frames, writes the PNG atomically, requests normal shutdown and exits successfully. Internal readiness deadline: 5 seconds; external timeout: 8 seconds. No AI images, HTML mockups, desktop-wide captures, native-title-bar claims or live Internet transfer claims are involved. Fixtures use `example.test` URLs and disable startup update requests.
 
 Visual iteration fixed low contrast, competing actions, floating/clipped settings, incorrectly unbounded progress bars, long-name overflow and the save action disappearing below small windows. The new popup keeps common per-file actions and the full-queue/settings entry points visible, with the same palette, typography and original icon as the main interface.
+
+The theme follow-up replaces fixed light colors with semantic palettes, including readable status/error colors and progress tracks. The labeled Dark/Light selector fits beside the settings heading at both reviewed sizes. Theme drafts preview immediately and use the existing Save changes action; the shared native window receives the matching theme request. Both styles keep the same spacing and typography. Actual native title-bar appearance and pointer-driven theme selection remain outside the client-area capture proof.
 
 ## Rendering and lifecycle evidence
 
@@ -37,11 +40,15 @@ The first CPU/GDI diagnostic caught unnecessary settings redraws: 222 layouts/ra
 
 See the committed runtime evidence in `docs/verification/` for the final binary's exact counts and CPU samples. Quiet visible intervals must have zero layouts/rasters; the genuinely hidden interval must have zero layouts/rasters/presents. A restore may produce a necessary fresh frame and must then settle again. These measurements do not certify actual pointer/keyboard latency or universal absence of perceived system-wide stutter; no GPU telemetry was available. Earlier automatic minimize tests were also exercised, but final reproducible diagnostics use explicit hide/restore to avoid unrelated native activation contaminating the hidden phase.
 
-The final evidence includes queue, settings and popup measurements. Their five-second visible and restored idle intervals record zero layouts/rasters/presents and 0% of one core; three-second hidden intervals also record zero work and CPU. Restore presents the retained bitmap once. Quiet visible, hidden and restored intervals must pass independently; native-activity intervals remain in the record and are not relabeled as idle. The gate now requires both initial and restored quiet samples, rather than accepting only one of them.
+The current evidence includes queue, settings and popup measurements in both Dark and Light, generated by `review-ui.ps1 -Diagnose -Theme Dark|Light -SkipTray`. The separately blocked native Shell test is explicitly skipped, rather than counted as a pass. Quiet visible, hidden and restored intervals must pass independently; native-activity intervals remain in the record and are not relabeled as idle. The gate requires both initial and restored quiet samples. The corresponding `runtime-main/settings/popup.json` files use Dark; `runtime-main/settings/popup-light.json` use Light.
 
-Local asset: `dist/DownloadManager-v0.1.0.exe`, 8,032,256 bytes, SHA-256 `76c30a7abcbaef5255a2463a800c0ed22f612334b74ca65302fb1e55a3f75805`.
+All six combinations pass: each five-second initial/restored quiet interval and three-second hidden interval records zero layouts, rasters and presentations, with measured 0% one-core CPU. These bounded samples do not certify real pointer latency or system-wide stutter.
+
+Local asset: `dist/DownloadManager-v0.1.0.exe`, 8,042,496 bytes, SHA-256 `ade76109c9c4dc09234eb4c9e452b7564db6153c4f486756094f36074c40a281`.
 
 ## Native tray boundary
+
+This section and `runtime-tray.json` retain the preceding `4f0a0ae` build's native tray evidence and original executable hash. Native Shell integration was not retested for the theme-only follow-up; the popup renderer was measured separately in both themes.
 
 Source review found that the pinned tray library omitted the required `NOTIFYICONDATAW.cbSize` in registration/modification/removal. A repository-local patch fills it, returns registration errors instead of claiming success, and includes the native error text in removal diagnostics. No shared registry sources were edited.
 

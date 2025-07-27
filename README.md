@@ -15,6 +15,7 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 - Review completed downloads separately and remove completed entries from history while keeping their files. Downloaded files are never automatically opened or executed.
 - Keep transfers running in the tray, with a compact download popup, pause/resume/retry actions and a native context menu. A second launch opens the existing instance.
 - Use one consistent application icon in the EXE, window, interface and tray, with embedded sizes from 16 to 256 pixels.
+- Choose dark or light appearance in Settings. Dark is the default; the saved theme applies to the queue, settings, dialogs and compact popup.
 - Check for stable GitHub releases manually or on startup (enabled by default, persistent opt-out). User-initiated installation verifies SHA-256 and stages a Windows x64 portable update before closing/restarting the application.
 
 There is one connection per download. Parallel segments, browser integration, authentication/cookie management, site extraction and scheduled downloads are outside this version.
@@ -25,7 +26,7 @@ There is one connection per download. Parallel segments, browser integration, au
 2. Select **New download** (Ctrl+N). Paste a URL, enter an existing folder path and choose a filename. Select **Download**. Invalid input stays in the form so you can correct it.
 3. Use **Pause**, **Resume**, or **Retry download** on a row. **More** contains the save location, queue reordering and **Cancel download**. Cancel preserves partial data.
 4. If the server cannot safely resume, choose **More → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.
-5. Open **Settings** to change download defaults and limits, save changes, disable startup checks or check/install an update. **Back to downloads** returns to the queue.
+5. Open **Settings** to change download defaults and limits, choose **Theme → Dark / Light**, disable startup checks or check/install an update. Theme selection previews immediately; **Save changes** keeps it across restarts. **Back to downloads** returns to the queue and discards unsaved appearance changes.
 
 By default, closing the window keeps downloads running in the tray. Single-click the tray icon to show or hide a compact list of up to four unfinished downloads; **Open downloads** opens the full queue. Double-click opens the queue directly. Right-click opens **New download**, **Pause all**, **Resume paused**, **Settings** and **Quit DownloadManager**. Escape or clicking outside dismisses the popup. Disable **Keep downloads running when the window closes** in Settings to exit on close instead. If Windows refuses tray registration, the application stays accessible in its regular window and closing exits.
 
@@ -70,11 +71,24 @@ See [architecture](docs/ARCHITECTURE.md), [verification](docs/VERIFICATION.md) a
 
 These are actual client-area bitmaps presented by the packaged Windows application. The full views are 960×680 logical pixels; the compact popup is 400×480. The queue uses synthetic paused/error fixtures; no Internet transfer is implied. The isolated settings fixture disables startup checking; new installations enable it by default.
 
-![Download queue with a paused file and a recoverable error](docs/screenshots/main-window.png)
+Dark is used for new installations and existing settings without a theme preference. Selecting and saving Light preserves that choice across restarts.
 
-![Settings with download defaults, speed controls and update checking](docs/screenshots/settings.png)
+![Dark download queue with a paused file and a recoverable error](docs/screenshots/main-window.png)
+
+![Dark settings with theme selection, download defaults and update checking](docs/screenshots/settings.png)
 
 ![Compact download popup with resume, retry and full queue actions](docs/screenshots/tray-popup.png)
+
+<details>
+<summary>Light theme</summary>
+
+![Light download queue with the same paused and recoverable-error fixtures](docs/screenshots/main-window-light.png)
+
+![Light settings with the saved light theme selected](docs/screenshots/settings-light.png)
+
+![Light compact download popup](docs/screenshots/tray-popup-light.png)
+
+</details>
 
 ![Application icon used by the EXE, window and tray](docs/screenshots/application-icon.png)
 
@@ -83,11 +97,13 @@ The same interface was reviewed empty and at the minimum 760×540 size. The sett
 ```powershell
 ./scripts/review-ui.ps1            # Bounded native render-save-exit captures
 ./scripts/review-ui.ps1 -Diagnose  # Isolated visible/hidden/restore measurements
+./scripts/review-ui.ps1 -Theme Light
+./scripts/review-ui.ps1 -Diagnose -Theme Light -SkipTray
 ```
 
 Captures save a complete PNG and exit after readiness and two real frames, with a five-second internal deadline and an eight-second external timeout. They use the same UI and CPU/GDI renderer as normal operation. This verifies the client area, not OS chrome, mouse/keyboard navigation or clipboard behavior. No Computer Use is required. Runtime diagnostics separately count actual layouts, rasters and presentations; screenshots alone do not certify idle behavior.
 
-All 26 offline tests pass. Windows decodes the packaged EXE icon at all six sizes. Bounded idle/hidden/restore measurements are recorded in [VERIFICATION.md](docs/VERIFICATION.md). The sandbox denies native tray registration with Windows error 5, so actual Shell placement and tray mouse/menu gestures remain unverified; the diagnostic reports this as a failure, never a pass. Outgoing loopback requests remain blocked with socket error 10013. Disk-full, power-loss, actual input/clipboard interaction and updater installation still require separate validation.
+All 27 offline tests pass, including saved-theme persistence and migration of older settings to the dark default. Windows decodes the packaged EXE icon at all six sizes. Bounded idle/hidden/restore measurements are recorded in [VERIFICATION.md](docs/VERIFICATION.md). The earlier native tray test was denied with Windows error 5, so actual Shell placement and tray mouse/menu gestures remain unverified; `-SkipTray` explicitly omits that separate test when reviewing themes. Outgoing loopback requests remain blocked with socket error 10013. Disk-full, power-loss, actual input/clipboard interaction and updater installation still require separate validation.
 
 ## License
 

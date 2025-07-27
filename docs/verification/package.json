@@ -1,6 +1,6 @@
 {
   "Path": "DownloadManager-v0.1.0.exe",
-  "Bytes": 8032256,
+  "Bytes": 8042496,
   "Machine": "x64",
   "Subsystem": "Windows GUI",
   "IconResources": true,
@@ -29,5 +29,5 @@
     "uxtheme.dll",
     "ws2_32.dll"
   ],
-  "sha256": "76c30a7abcbaef5255a2463a800c0ed22f612334b74ca65302fb1e55a3f75805"
+  "sha256": "ade76109c9c4dc09234eb4c9e452b7564db6153c4f486756094f36074c40a281"
 }
