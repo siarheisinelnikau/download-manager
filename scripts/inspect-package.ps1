@@ -1,5 +1,14 @@
-param([string]$Path = (Join-Path (Split-Path -Parent $PSScriptRoot) 'dist/DownloadManager-v0.1.0.exe'))
+param([string]$Path, [string]$ExpectedVersion)
 $ErrorActionPreference = 'Stop'
+if (-not $Path) {
+    . (Join-Path $PSScriptRoot 'project-info.ps1')
+    $package = Get-DownloadManagerPackage (Split-Path -Parent $PSScriptRoot)
+    $Path = $package.AssetPath
+    $ExpectedVersion = $package.Version
+}
+$versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo([IO.Path]::GetFullPath($Path))
+if ($ExpectedVersion -and ($versionInfo.FileVersion -ne $ExpectedVersion -or $versionInfo.ProductVersion -ne $ExpectedVersion)) { throw 'Packaged Windows version does not match Cargo.toml' }
+if ($versionInfo.OriginalFilename -ne "DownloadManager-v$($versionInfo.ProductVersion).exe") { throw 'OriginalFilename does not match the packaged product version' }
 $bytes = [System.IO.File]::ReadAllBytes($Path)
 $pe = [BitConverter]::ToInt32($bytes, 60)
 if ([Text.Encoding]::ASCII.GetString($bytes, $pe, 4) -ne "PE`0`0") { throw 'Invalid PE signature' }
@@ -70,5 +79,5 @@ try {
         [void][DownloadManagerPackageIcons]::DestroyIcon($icon)
     }
 } finally { [void][DownloadManagerPackageIcons]::FreeLibrary($module) }
-[PSCustomObject]@{ Path = $Path; Bytes = $bytes.Length; Machine = 'x64'; Subsystem = 'Windows GUI'; IconResources = $true; IconDecodedSizes = $iconSizes; Imports = @($imports | Sort-Object -Unique) } | ConvertTo-Json -Depth 3
+[PSCustomObject]@{ Path = $Path; Bytes = $bytes.Length; FileVersion = $versionInfo.FileVersion; ProductVersion = $versionInfo.ProductVersion; OriginalFilename = $versionInfo.OriginalFilename; Machine = 'x64'; Subsystem = 'Windows GUI'; IconResources = $true; IconDecodedSizes = $iconSizes; Imports = @($imports | Sort-Object -Unique) } | ConvertTo-Json -Depth 3
 

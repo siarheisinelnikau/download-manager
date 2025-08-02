@@ -5,6 +5,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'project-info.ps1')
+$package = Get-DownloadManagerPackage $repo
 $fixture = Join-Path $repo ('.local/gui-smoke/design/' + $Theme.ToLowerInvariant())
 $suffix = if ($Theme -eq 'Light') { '-light' } else { '' }
 $downloads = Join-Path $fixture 'downloads'
@@ -37,7 +39,7 @@ try {
         $arguments = @($Mode, $View, $Output) + $Size
         $log = Join-Path $fixture (([IO.Path]::GetFileName($Output)) + '.stderr.log')
         # GDI self-capture needs a real native window; it closes itself after saving.
-        $process = Start-Process -FilePath (Join-Path $repo 'dist/DownloadManager-v0.1.0.exe') -ArgumentList $arguments -WorkingDirectory $repo -WindowStyle Normal -RedirectStandardError $log -PassThru
+        $process = Start-Process -FilePath $package.AssetPath -ArgumentList $arguments -WorkingDirectory $repo -WindowStyle Normal -RedirectStandardError $log -PassThru
         $timeout = if ($Mode -eq '--diagnose-ui') { 35000 } else { 8000 }
         if (-not $process.WaitForExit($timeout)) { Stop-Process -Id $process.Id -Force; throw "Owned diagnostic timed out: $View $Scenario" }
         if ($process.ExitCode -ne 0) { throw "Review failed: $(Get-Content -LiteralPath $log -Raw)" }
@@ -68,7 +70,7 @@ try {
         Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('760','540')
     }
     if (-not $Diagnose) {
-        $iconProcess = Start-Process -FilePath (Join-Path $repo 'dist/DownloadManager-v0.1.0.exe') -ArgumentList @('--export-icon', (Join-Path $screenshots 'application-icon.png')) -WindowStyle Hidden -PassThru
+        $iconProcess = Start-Process -FilePath $package.AssetPath -ArgumentList @('--export-icon', (Join-Path $screenshots 'application-icon.png')) -WindowStyle Hidden -PassThru
         if (-not $iconProcess.WaitForExit(8000)) { Stop-Process -Id $iconProcess.Id -Force; throw 'Owned icon export timed out' }
         if ($iconProcess.ExitCode -ne 0) { throw 'Icon export failed' }
     }
