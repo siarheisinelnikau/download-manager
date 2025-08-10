@@ -1,6 +1,6 @@
 # DownloadManager
 
-A native Windows download queue with conservative, checkpointed HTTP(S) resume. Version **0.1.0** is a local, unpublished implementation with reviewed native screenshots and bounded runtime diagnostics. Full interactive validation is still pending.
+A native Windows download queue with conservative, checkpointed HTTP(S) resume. Version **0.1.1** is a local, unpublished implementation with reviewed native screenshots and bounded runtime diagnostics. Full interactive validation is still pending.
 
 Independent MIT-licensed implementation. No affiliation with Internet Download Manager; no competitor source or artwork is used. There is no claim of universal resume support or universal speed improvement.
 
@@ -22,7 +22,7 @@ There is one connection per download. Parallel segments, browser integration, au
 
 ## Use
 
-1. Start `DownloadManager-v0.1.0.exe` on Windows x64.
+1. Start `DownloadManager-v0.1.1.exe` on Windows x64.
 2. Select **New download** (Ctrl+N). Paste a URL, enter an existing folder path and choose a filename. Select **Download**. Invalid input stays in the form so you can correct it.
 3. Use **Pause**, **Resume**, or **Retry download** on a row. **More** contains the save location, queue reordering and **Cancel download**. Cancel preserves partial data.
 4. If the server cannot safely resume, choose **More → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.
@@ -54,7 +54,7 @@ Helper failures are recorded in `%LOCALAPPDATA%\DownloadManager\updates\last-upd
 
 ## Build and checks
 
-Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visual Studio C++ build tools and Windows SDK. The GUI uses egui 0.33.3 with CPU rasterization and Win32 GDI presentation; the executable has no OpenGL/DirectX rendering dependency. Windows 10/11 x64 is the intended target, with broader interactive compatibility still pending. Other OS/architecture builds are not release targets for v0.1.0.
+Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visual Studio C++ build tools and Windows SDK. The GUI uses egui 0.33.3 with CPU rasterization and Win32 GDI presentation; the executable has no OpenGL/DirectX rendering dependency. Windows 10/11 x64 is the intended target, with broader interactive compatibility still pending. Other OS/architecture builds are not release targets for v0.1.1.
 
 ```powershell
 ./scripts/check.ps1 -Offline
@@ -63,7 +63,9 @@ Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visu
 ./scripts/package.ps1 -Offline
 ```
 
-Omit `-Offline` when dependency downloads are needed. All Cargo commands use two jobs and a repository-local `target`. The package script builds the MSVC target with a static CRT and prepares `dist/DownloadManager-v0.1.0.exe`, `SHA256SUMS.txt`, license notices and release notes. It does not run the GUI, run the updater or publish anything. The CI workflow performs checks including synthetic loopback tests and uploads a build artifact, without creating releases.
+Omit `-Offline` when dependency downloads are needed. All Cargo commands use two jobs and a repository-local `target`. The package script builds the MSVC target with a static CRT and prepares `dist/DownloadManager-v0.1.1.exe`, `SHA256SUMS.txt`, license notices and release notes. It does not run the GUI, run the updater or publish anything. The CI workflow performs checks including synthetic loopback tests and uploads a build artifact, without creating releases.
+
+`Cargo.toml` is the version source for the UI, Windows file/product properties and executable naming. Changed executables receive a new version before delivery; ordinary local recompilations do not. The inspection script checks that the packaged Windows version matches the manifest. Build notes identify the changes since the preceding shared build even before public releases exist.
 
 See [architecture](docs/ARCHITECTURE.md), [verification](docs/VERIFICATION.md) and the [initial release-note draft](docs/RELEASE_NOTES.md).
 
