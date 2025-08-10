@@ -1,8 +1,14 @@
-# DownloadManager v0.1.0 — initial release draft
+# DownloadManager v0.1.1 — local build notes
 
-First implementation of an independent native Windows download manager. No preceding published release exists; this draft describes initial capabilities. Publication is not part of the current work.
+This build replaces the previously shared 0.1.0 development builds. No published release exists; publication is not part of the current work.
 
-## Added
+## Changed since the shared 0.1.0 build
+
+- The application, Windows file/product properties and executable filename now identify this build as 0.1.1, so successive delivered builds can be distinguished.
+- Packaging, inspection and screenshot scripts resolve the executable name from Cargo metadata. They no longer launch a fixed 0.1.0 filename.
+- Packaging rejects a Windows resource version that differs from the project version. Future changed executables receive a new version before delivery; ordinary test compilations keep their current version.
+
+## Initial application capabilities
 
 - An English native interface for adding HTTP(S) URLs, choosing a destination and filename, managing a queue and viewing completed files.
 - Pause/resume/cancel/retry, explicit restart from zero, queue reordering and persistent settings/history.
@@ -21,7 +27,7 @@ First implementation of an independent native Windows download manager. No prece
 
 ## Platform and assets
 
-Intended for Windows 10/11 x64. The portable MSVC build uses a static CRT and CPU/GDI rendering, without an application OpenGL/DirectX dependency. Planned single-architecture asset: `DownloadManager-v0.1.0.exe`, accompanied by `SHA256SUMS.txt`, MIT and dependency notices.
+Intended for Windows 10/11 x64. The portable MSVC build uses a static CRT and CPU/GDI rendering, without an application OpenGL/DirectX dependency. Single-architecture asset: `DownloadManager-v0.1.1.exe`, accompanied by `SHA256SUMS.txt`, MIT and dependency notices.
 
 ## Known limitations and validation
 

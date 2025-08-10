@@ -1,7 +1,7 @@
 {
   "date": "2026-11-01",
-  "code_revision": "72a804666772afd74f40f0d752d9f083849f427b",
-  "sha256": "ade76109c9c4dc09234eb4c9e452b7564db6153c4f486756094f36074c40a281",
+  "code_revision": "c037b99f00930be558173f7ac836258b5c25a377",
+  "sha256": "b65c0a03a54ea836ec9263aaa9fdda65e01de1d16b06104ec48954ec93d11f1d",
   "default_theme": "Dark",
   "renderer": "CPU rasterization and Win32 GDI",
   "scope": "Real client-area bitmaps from the packaged executable; synthetic fixtures; no Computer Use",
@@ -61,5 +61,6 @@
   ],
   "ordinary_input_verified": false,
   "native_tray_verified": false,
-  "native_tray_test": "Explicitly skipped for theme review; preceding blocked evidence retained in runtime-tray.json"
+  "native_tray_test": "Explicitly skipped for theme review; preceding blocked evidence retained in runtime-tray.json",
+  "executable": "DownloadManager-v0.1.1.exe"
 }
