@@ -16,9 +16,17 @@ use winit::{
 };
 
 enum UserEvent {
+    FolderSelected {
+        generation: u64,
+        target: crate::folder_picker::Target,
+        result: Result<Option<PathBuf>, String>,
+    },
     Tray(crate::tray::Command),
     BackendChanged,
-    Repaint { when: Instant, pass: u64 },
+    Repaint {
+        when: Instant,
+        pass: u64,
+    },
 }
 
 #[derive(Clone, Copy, Default, serde::Serialize)]
@@ -50,6 +58,7 @@ struct FrameTiming {
 }
 
 struct Capture {
+    new_download: bool,
     path: PathBuf,
     settings: bool,
     popup: bool,
@@ -62,6 +71,7 @@ struct Capture {
 impl Capture {
     fn new(path: PathBuf, view: &str) -> Self {
         Self {
+            new_download: view == "new",
             path,
             settings: view == "settings",
             popup: view == "popup",
@@ -128,6 +138,7 @@ const PHASES: [(&str, u64); 5] = [
     ("restored_idle", 5),
 ];
 struct Diagnostic {
+    new_download: bool,
     path: PathBuf,
     settings: bool,
     popup: bool,
@@ -148,6 +159,7 @@ struct Diagnostic {
 impl Diagnostic {
     fn new(path: PathBuf, view: &str) -> Self {
         Self {
+            new_download: view == "new",
             path,
             settings: view == "settings",
             popup: view == "popup",
@@ -227,7 +239,7 @@ impl Diagnostic {
                     && s["counts"]["presents"] == 0
             });
         let report = serde_json::json!({"renderer":"egui CPU rasterizer -> softbuffer Win32 GDI BitBlt", "executable":std::env::current_exe()?, "pid":std::process::id(),
-            "settings_page":self.settings,"popup":self.popup,"tray_lifecycle":self.tray,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
+            "settings_page":self.settings,"new_download":self.new_download,"popup":self.popup,"tray_lifecycle":self.tray,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
             "limitations":"No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."});
         std::fs::write(&self.path, serde_json::to_vec_pretty(&report)?)?;
         Ok(())
@@ -270,6 +282,7 @@ fn cpu_seconds() -> Option<f64> {
 }
 
 struct CpuHost {
+    folder_proxy: EventLoopProxy<UserEvent>,
     tray: Option<crate::tray::Tray>,
     tray_sender: Arc<dyn Fn(crate::tray::Command) + Send + Sync>,
     instance: Option<crate::instance::Instance>,
@@ -304,6 +317,7 @@ struct CpuHost {
 }
 impl CpuHost {
     fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
+        let folder_proxy = proxy.clone();
         let tray_proxy = proxy.clone();
         let tray_sender: Arc<dyn Fn(crate::tray::Command) + Send + Sync> =
             Arc::new(move |command| {
@@ -325,6 +339,7 @@ impl CpuHost {
             }
         });
         Self {
+            folder_proxy,
             tray: None,
             tray_sender,
             instance: None,
@@ -370,6 +385,55 @@ impl CpuHost {
     fn fail(&mut self, event_loop: &ActiveEventLoop, error: impl std::fmt::Display) {
         self.error = Some(error.to_string());
         event_loop.exit();
+    }
+    fn launch_folder_picker(&mut self, request: crate::folder_picker::Request) {
+        let generation = request.generation;
+        let target = request.target;
+        let owner_window = self.window.as_ref().unwrap().clone();
+        #[cfg(windows)]
+        let owner = {
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            owner_window
+                .window_handle()
+                .map_err(|e| e.to_string())
+                .and_then(|handle| match handle.as_raw() {
+                    RawWindowHandle::Win32(handle) => Ok(handle.hwnd.get() as usize),
+                    _ => Err("The native window handle is unavailable".into()),
+                })
+        };
+        #[cfg(not(windows))]
+        let owner: Result<usize, String> = Ok(0);
+        let owner = match owner {
+            Ok(owner) => owner,
+            Err(error) => {
+                self.app
+                    .as_mut()
+                    .unwrap()
+                    .folder_selected(generation, target, Err(error));
+                self.schedule(Instant::now());
+                return;
+            }
+        };
+        let proxy = self.folder_proxy.clone();
+        if let Err(error) = std::thread::Builder::new()
+            .name("folder-picker".into())
+            .spawn(move || {
+                let result = crate::folder_picker::show(owner, &request.initial)
+                    .map_err(|e| format!("{e:#}"));
+                drop(owner_window);
+                let _ = proxy.send_event(UserEvent::FolderSelected {
+                    generation,
+                    target,
+                    result,
+                });
+            })
+        {
+            self.app
+                .as_mut()
+                .unwrap()
+                .folder_selected(generation, target, Err(error.to_string()));
+            self.schedule(Instant::now());
+        }
     }
     fn hide_to_tray(&mut self) {
         if self.popup
@@ -573,6 +637,14 @@ impl CpuHost {
             .diagnostic
             .as_ref()
             .is_some_and(|d| d.settings && !d.opened);
+        let new_capture = self
+            .capture
+            .as_ref()
+            .is_some_and(|c| c.new_download && !c.opened);
+        let new_diagnostic = self
+            .diagnostic
+            .as_ref()
+            .is_some_and(|d| d.new_download && !d.opened);
         if (open_capture || open_diagnostic) && self.app.as_ref().unwrap().ready() {
             self.app.as_mut().unwrap().open_settings();
             if let Some(c) = &mut self.capture {
@@ -582,6 +654,21 @@ impl CpuHost {
                 d.opened = true;
             }
         }
+        if (new_capture || new_diagnostic) && self.app.as_ref().unwrap().ready() {
+            self.app.as_mut().unwrap().show_new_download();
+            if let Some(c) = &mut self.capture {
+                c.opened = true;
+            }
+            if let Some(d) = &mut self.diagnostic {
+                d.opened = true;
+            }
+        }
+        // Count complete frames of the requested view, rather than readiness arriving mid-frame.
+        let capture_ready = self.app.as_ref().unwrap().ready()
+            && self
+                .capture
+                .as_ref()
+                .is_none_or(|c| !(c.settings || c.new_download) || c.opened);
         let input = self.input.as_mut().unwrap();
         egui_winit::update_viewport_info(
             input
@@ -684,7 +771,7 @@ impl CpuHost {
                     total_ms: (present_end - start).as_secs_f64() * 1000.,
                 });
             }
-            if self.app.as_ref().unwrap().ready() {
+            if capture_ready {
                 capture.ready_frames += 1;
             }
             if capture.ready_frames >= 2 && !capture.saved {
@@ -703,6 +790,9 @@ impl CpuHost {
         }
         if let Some(action) = popup_action {
             self.dispatch_tray(event_loop, action);
+        }
+        if let Some(request) = self.app.as_mut().unwrap().take_folder_request() {
+            self.launch_folder_picker(request);
         }
         Ok(())
     }
@@ -780,6 +870,17 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             return;
         }
         match event {
+            UserEvent::FolderSelected {
+                generation,
+                target,
+                result,
+            } => {
+                self.app
+                    .as_mut()
+                    .unwrap()
+                    .folder_selected(generation, target, result);
+                self.schedule(Instant::now());
+            }
             UserEvent::Tray(command) => self.dispatch_tray(event_loop, command),
             UserEvent::BackendChanged => {
                 let snapshot = self.app.as_ref().unwrap().snapshot();

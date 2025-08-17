@@ -61,11 +61,13 @@ try {
         Invoke-Review '--diagnose-ui' 'main' (Join-Path $fixture 'runtime-main.json') 'populated'
         Invoke-Review '--diagnose-ui' 'settings' (Join-Path $fixture 'runtime-settings.json') 'empty'
         Invoke-Review '--diagnose-ui' 'popup' (Join-Path $fixture 'runtime-popup.json') 'populated'
+        Invoke-Review '--diagnose-ui' 'new' (Join-Path $fixture 'runtime-new.json') 'empty'
         if (-not $SkipTray) { Invoke-Review '--diagnose-ui' 'tray' (Join-Path $fixture 'runtime-tray.json') 'populated' }
     } else {
         Invoke-Review '--capture-ui' 'main' (Join-Path $screenshots "main-window$suffix.png") 'populated'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $screenshots "settings$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots "tray-popup$suffix.png") 'populated'
+        Invoke-Review '--capture-ui' 'new' (Join-Path $screenshots "new-download$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'main' (Join-Path $fixture 'empty.png') 'empty'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('760','540')
     }
