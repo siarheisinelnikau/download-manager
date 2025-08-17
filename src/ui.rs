@@ -1,3 +1,4 @@
+use crate::folder_picker::{Request as FolderRequest, Target as FolderTarget};
 use crate::theme::{self, palette};
 use download_manager::{
     manager::{Command, Manager, Snapshot},
@@ -31,6 +32,9 @@ pub struct App {
     settings_directory: String,
     saved_settings: bool,
     restart: Option<u64>,
+    folder_request: Option<FolderRequest>,
+    folder_pending: Option<(u64, FolderTarget)>,
+    folder_generation: u64,
 }
 
 impl App {
@@ -83,6 +87,9 @@ impl App {
             settings_directory: String::new(),
             saved_settings: false,
             restart: None,
+            folder_request: None,
+            folder_pending: None,
+            folder_generation: 0,
         }
     }
 
@@ -330,11 +337,83 @@ impl App {
     }
 
     pub fn open_settings(&mut self) {
+        self.folder_generation = self.folder_generation.wrapping_add(1);
         if let Some(manager) = &self.manager {
             self.settings = manager.snapshot().state.settings;
             self.settings_directory = self.settings.default_directory.display().to_string();
             self.settings_open = true;
             self.saved_settings = false;
+        }
+    }
+
+    fn choose_folder(&mut self, target: FolderTarget) {
+        if self.folder_pending.is_some() {
+            return;
+        }
+        let initial = match target {
+            FolderTarget::NewDownload => &self.directory,
+            FolderTarget::Defaults => &self.settings_directory,
+        };
+        self.folder_pending = Some((self.folder_generation, target));
+        self.folder_request = Some(FolderRequest {
+            generation: self.folder_generation,
+            target,
+            initial: PathBuf::from(initial),
+        });
+    }
+
+    pub fn take_folder_request(&mut self) -> Option<FolderRequest> {
+        self.folder_request.take()
+    }
+
+    pub fn folder_selected(
+        &mut self,
+        generation: u64,
+        target: FolderTarget,
+        result: Result<Option<PathBuf>, String>,
+    ) {
+        if self.folder_pending != Some((generation, target)) {
+            return;
+        }
+        self.folder_pending = None;
+        if generation != self.folder_generation
+            || !match target {
+                FolderTarget::NewDownload => self.add_open,
+                FolderTarget::Defaults => self.settings_open,
+            }
+        {
+            return;
+        }
+        let result = result.and_then(|chosen| {
+            chosen
+                .map(|path| {
+                    path.into_os_string().into_string().map_err(|_| {
+                        "Choose another folder: this folder name cannot be represented as text."
+                            .to_owned()
+                    })
+                })
+                .transpose()
+        });
+        match result {
+            Ok(Some(path)) => match target {
+                FolderTarget::NewDownload => {
+                    self.directory = path;
+                    self.form_error = None;
+                }
+                FolderTarget::Defaults => {
+                    self.settings_directory = path;
+                    self.local_error = None;
+                }
+            },
+            Ok(None) => {}
+            Err(error) => {
+                let message =
+                    format!("Couldn't choose a folder. You can enter its path manually. {error}");
+                match target {
+                    FolderTarget::NewDownload => self.form_error = Some(message),
+                    FolderTarget::Defaults => self.local_error = Some(message),
+                }
+            }
         }
     }
 
@@ -373,6 +452,7 @@ impl App {
     }
 
     fn open_add(&mut self, snapshot: &Snapshot) {
+        self.folder_generation = self.folder_generation.wrapping_add(1);
         self.directory = snapshot
             .state
             .settings
@@ -457,7 +537,13 @@ impl App {
                 self.custom_filename = true;
             }
             ui.label("Save to folder");
-            ui.add(egui::TextEdit::singleline(&mut self.directory).desired_width(f32::INFINITY));
+            if folder_field(
+                ui,
+                &mut self.directory,
+                self.folder_pending.is_some() || self.pending_add.is_some(),
+            ) {
+                self.choose_folder(FolderTarget::NewDownload);
+            }
             secondary(
                 ui,
                 "Use an existing folder. Existing files are never replaced.",
@@ -509,7 +595,9 @@ impl App {
             ui.set_max_width(720.0);
             section(ui, "Download defaults");
             ui.label("Save new downloads to");
-            ui.add(egui::TextEdit::singleline(&mut self.settings_directory).desired_width(f32::INFINITY));
+            if folder_field(ui, &mut self.settings_directory, self.folder_pending.is_some()) {
+                self.choose_folder(FolderTarget::Defaults);
+            }
             secondary(ui, "You can choose another folder for each download.");
             ui.add_space(6.0);
             egui::Grid::new("download_limits").num_columns(2).spacing([24.0, 12.0]).show(ui, |ui| {
@@ -533,7 +621,7 @@ impl App {
             let busy = matches!(snapshot.update, UpdateStatus::Checking | UpdateStatus::Downloading { .. } | UpdateStatus::Staged(_));
             if ui.add_enabled(!busy, egui::Button::new("Check for updates")).clicked() { self.send(Command::CheckUpdates); }
             match &snapshot.update {
-                UpdateStatus::Idle => { secondary(ui, "No update check yet. You can check manually at any time."); }
+                UpdateStatus::Idle => {}
                 UpdateStatus::Checking => { secondary(ui, "Checking for an update…"); }
                 UpdateStatus::Current => { ui.colored_label(colors.success, "You have the latest published version."); }
                 UpdateStatus::Error(error) => {
@@ -931,6 +1019,24 @@ fn primary<'a>(ui: &egui::Ui, text: &'a str) -> egui::Button<'a> {
 fn secondary(ui: &mut egui::Ui, text: &str) {
     let colors = palette(ui.ctx());
     ui.label(RichText::new(text).color(colors.muted));
+}
+
+fn folder_field(ui: &mut egui::Ui, value: &mut String, busy: bool) -> bool {
+    ui.horizontal(|ui| {
+        let input_width = (ui.available_width() - 104.0 - ui.spacing().item_spacing.x).max(80.0);
+        ui.add_sized(
+            [input_width, ui.spacing().interact_size.y],
+            egui::TextEdit::singleline(value),
+        );
+        ui.add_enabled(!busy, egui::Button::new("Browse…"))
+            .on_hover_text(if busy {
+                "A folder selection is already in progress"
+            } else {
+                "Choose a folder"
+            })
+            .clicked()
+    })
+    .inner
 }
 fn section(ui: &mut egui::Ui, text: &str) {
     ui.label(RichText::new(text).size(18.0).strong());

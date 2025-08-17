@@ -1,5 +1,6 @@
 #![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
+mod folder_picker;
 mod icons;
 mod instance;
 mod theme;
@@ -9,6 +10,23 @@ mod window;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args_os().collect();
+    if args.get(1).is_some_and(|a| a == "--probe-folder-picker") {
+        if args.len() != 4 || std::env::var_os("DOWNLOAD_MANAGER_DATA_DIR").is_none() {
+            return Err("Usage: --probe-folder-picker FIXTURE_FOLDER OUTPUT.json (requires isolated DOWNLOAD_MANAGER_DATA_DIR)".into());
+        }
+        let result = folder_picker::probe(std::path::Path::new(&args[2]));
+        std::fs::write(
+            &args[3],
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "version": download_manager::model::VERSION,
+                "dialog_shown": false,
+                "configured": result.is_ok(),
+                "error": result.as_ref().err().map(ToString::to_string),
+            }))?,
+        )?;
+        result?;
+        return Ok(());
+    }
     if args.get(1).is_some_and(|a| a == "--apply-update") {
         if args.len() != 6 {
             return Err("Invalid updater arguments".into());
@@ -35,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.get(1).is_some_and(|a| a == "--capture-ui") {
         if !matches!(args.len(), 4 | 6) {
             return Err(
-                "Usage: --capture-ui main|settings|popup OUTPUT.png [WIDTH HEIGHT] (requires DOWNLOAD_MANAGER_DATA_DIR)"
+                "Usage: --capture-ui main|settings|popup|new OUTPUT.png [WIDTH HEIGHT] (requires DOWNLOAD_MANAGER_DATA_DIR)"
                     .into(),
             );
         }
@@ -45,8 +63,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         let view = args[2].to_str().ok_or("Invalid capture view")?;
-        if !matches!(view, "main" | "settings" | "popup") {
-            return Err("Capture view must be main, settings or popup".into());
+        if !matches!(view, "main" | "settings" | "popup" | "new") {
+            return Err("Capture view must be main, settings, popup or new".into());
         }
         let size = if args.len() == 6 {
             let width: u32 = args[4].to_str().ok_or("Invalid width")?.parse()?;
@@ -62,11 +80,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.get(1).is_some_and(|a| a == "--diagnose-ui") {
         if args.len() != 4 || std::env::var_os("DOWNLOAD_MANAGER_DATA_DIR").is_none() {
-            return Err("Usage: --diagnose-ui main|settings|popup|tray OUTPUT.json (requires DOWNLOAD_MANAGER_DATA_DIR)".into());
+            return Err("Usage: --diagnose-ui main|settings|popup|new|tray OUTPUT.json (requires DOWNLOAD_MANAGER_DATA_DIR)".into());
         }
         let view = args[2].to_str().ok_or("Invalid diagnostic view")?;
-        if !matches!(view, "main" | "settings" | "popup" | "tray") {
-            return Err("Diagnostic view must be main, settings, popup or tray".into());
+        if !matches!(view, "main" | "settings" | "popup" | "new" | "tray") {
+            return Err("Diagnostic view must be main, settings, popup, new or tray".into());
         }
         return window::run_diagnostic(view, std::path::PathBuf::from(&args[3]));
     }

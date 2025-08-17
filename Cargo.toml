@@ -1,6 +1,6 @@
 [package]
 name = "download-manager"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
@@ -25,6 +25,7 @@ url = "2.5.8"
 winit = { version = "0.30.13", default-features = false, features = ["rwh_06", "x11"] }
 
 [target.'cfg(windows)'.dependencies]
+windows = { version = "=0.61.3", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 tray-icon = { version = "=0.21.3", default-features = false }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
 
