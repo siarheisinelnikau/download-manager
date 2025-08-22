@@ -139,6 +139,7 @@ const PHASES: [(&str, u64); 5] = [
 ];
 struct Diagnostic {
     new_download: bool,
+    navigation: bool,
     path: PathBuf,
     settings: bool,
     popup: bool,
@@ -160,6 +161,7 @@ impl Diagnostic {
     fn new(path: PathBuf, view: &str) -> Self {
         Self {
             new_download: view == "new",
+            navigation: view == "navigation",
             path,
             settings: view == "settings",
             popup: view == "popup",
@@ -194,7 +196,9 @@ impl Diagnostic {
         } else {
             PHASES[self.phase].0.to_owned()
         };
-        self.samples.push(serde_json::json!({"state":state, "seconds":elapsed, "counts":counters.since(self.baseline),
+        let size = window.inner_size();
+        let scale = window.scale_factor();
+        self.samples.push(serde_json::json!({"state":state, "seconds":elapsed, "logical_size":[size.width as f64/scale,size.height as f64/scale], "counts":counters.since(self.baseline),
             "cpu_one_core_percent": self.cpu.zip(cpu).map(|(before,after)|100.0*(after-before)/elapsed), "minimized":window.is_minimized(), "visible":window.is_visible()}));
         if changed && self.idle_retries == 0 {
             self.idle_retries = 1;
@@ -239,7 +243,7 @@ impl Diagnostic {
                     && s["counts"]["presents"] == 0
             });
         let report = serde_json::json!({"renderer":"egui CPU rasterizer -> softbuffer Win32 GDI BitBlt", "executable":std::env::current_exe()?, "pid":std::process::id(),
-            "settings_page":self.settings,"new_download":self.new_download,"popup":self.popup,"tray_lifecycle":self.tray,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
+            "settings_page":self.settings,"new_download":self.new_download,"navigation":self.navigation,"popup":self.popup,"tray_lifecycle":self.tray,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
             "limitations":"No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."});
         std::fs::write(&self.path, serde_json::to_vec_pretty(&report)?)?;
         Ok(())
@@ -287,6 +291,7 @@ struct CpuHost {
     tray_sender: Arc<dyn Fn(crate::tray::Command) + Send + Sync>,
     instance: Option<crate::instance::Instance>,
     popup: bool,
+    settings_compact: bool,
     popup_focused: bool,
     last_popup_dismissed: Option<Instant>,
     full_geometry: Option<(
@@ -344,6 +349,7 @@ impl CpuHost {
             tray_sender,
             instance: None,
             popup: false,
+            settings_compact: false,
             popup_focused: false,
             last_popup_dismissed: None,
             full_geometry: None,
@@ -450,12 +456,55 @@ impl CpuHost {
         self.popup_focused = false;
         self.deadline = None;
     }
+    fn sync_settings_window(&mut self) {
+        // Fixed-screen review modes already create the requested window size.
+        if self.capture.as_ref().is_some_and(|c| c.settings)
+            || self.diagnostic.as_ref().is_some_and(|d| d.settings)
+        {
+            return;
+        }
+        if self.popup || !self.app.as_ref().is_some_and(|app| app.ready()) {
+            return;
+        }
+        let wanted = self.app.as_ref().unwrap().settings_visible();
+        if wanted == self.settings_compact {
+            return;
+        }
+        let window = self.window.as_ref().unwrap();
+        self.settings_compact = wanted;
+        if wanted {
+            if self.full_geometry.is_none() {
+                self.full_geometry = Some((
+                    window.outer_position().ok(),
+                    window.inner_size(),
+                    window.is_maximized(),
+                ));
+            }
+            window.set_maximized(false);
+            window.set_min_inner_size(Some(LogicalSize::new(560, 440)));
+            let _ = window.request_inner_size(LogicalSize::new(620, 500));
+        } else {
+            window.set_min_inner_size(Some(LogicalSize::new(760, 540)));
+            if let Some((position, size, maximized)) = self.full_geometry.take() {
+                if let Some(position) = position {
+                    window.set_outer_position(position);
+                }
+                let _ = window.request_inner_size(size);
+                window.set_maximized(maximized);
+            } else {
+                let _ = window.request_inner_size(LogicalSize::new(960, 680));
+            }
+        }
+        self.ctx.memory_mut(|m| m.reset_areas());
+        self.schedule(Instant::now());
+    }
     fn restore_full(&mut self) {
         let Some(window) = &self.window else {
             return;
         };
-        if self.popup {
+        if self.popup || (self.settings_compact && !self.app.as_ref().unwrap().settings_visible()) {
             self.popup = false;
+            self.settings_compact = false;
             window.set_decorations(true);
             window.set_resizable(true);
             window.set_window_level(winit::window::WindowLevel::Normal);
@@ -482,6 +531,7 @@ impl CpuHost {
             window.focus_window();
         }
         self.occluded = false;
+        self.sync_settings_window();
         self.schedule(Instant::now());
     }
     fn place_popup(&self) {
@@ -534,7 +584,7 @@ impl CpuHost {
                 let Some(window) = &self.window else {
                     return;
                 };
-                if !self.popup {
+                if !self.popup && self.full_geometry.is_none() {
                     let mut size = window.inner_size();
                     if size.width < 760 || size.height < 540 {
                         size = winit::dpi::PhysicalSize::new(960, 680);
@@ -543,6 +593,7 @@ impl CpuHost {
                         Some((window.outer_position().ok(), size, window.is_maximized()));
                 }
                 self.popup = true;
+                self.settings_compact = false;
                 self.popup_focused = false;
                 self.popup_anchor = Some((x, y));
                 window.set_maximized(false);
@@ -791,6 +842,7 @@ impl CpuHost {
         if let Some(action) = popup_action {
             self.dispatch_tray(event_loop, action);
         }
+        self.sync_settings_window();
         if let Some(request) = self.app.as_mut().unwrap().take_folder_request() {
             self.launch_folder_picker(request);
         }
@@ -819,6 +871,8 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                         .with_inner_size(LogicalSize::new(self.size.0, self.size.1))
                         .with_min_inner_size(if self.popup {
                             LogicalSize::new(360, 220)
+                        } else if self.settings_compact {
+                            LogicalSize::new(560, 440)
                         } else {
                             LogicalSize::new(760, 540)
                         }),
@@ -1017,6 +1071,16 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                 .as_mut()
                 .unwrap()
                 .advance(self.counters, self.window.as_ref().unwrap());
+            if self.diagnostic.as_ref().is_some_and(|d| d.navigation) {
+                let phase = self.diagnostic.as_ref().unwrap().phase;
+                if phase != old_phase {
+                    match phase {
+                        1 => self.dispatch_tray(event_loop, crate::tray::Command::Settings),
+                        3 => self.dispatch_tray(event_loop, crate::tray::Command::Queue),
+                        _ => {}
+                    }
+                }
+            }
             if self.diagnostic.as_ref().is_some_and(|d| d.tray) {
                 let phase = self.diagnostic.as_ref().unwrap().phase;
                 if phase != old_phase {
@@ -1092,8 +1156,12 @@ fn run_mode(
     host.diagnostic = diagnostic;
     host.popup = host.capture.as_ref().is_some_and(|c| c.popup)
         || host.diagnostic.as_ref().is_some_and(|d| d.popup);
+    host.settings_compact = host.capture.as_ref().is_some_and(|c| c.settings)
+        || host.diagnostic.as_ref().is_some_and(|d| d.settings);
     if host.popup {
-        host.size = (400, 480);
+        host.size = (400, 432);
+    } else if host.settings_compact {
+        host.size = (620, 500);
     }
     if host.capture.is_none() && host.diagnostic.as_ref().is_none_or(|d| d.tray) {
         let sender = host.tray_sender.clone();
@@ -1128,6 +1196,11 @@ fn run_mode(
             .and_then(|child| child.try_wait().ok().flatten())
             .and_then(|status| status.code());
         d.samples.push(serde_json::json!({"state":"tray_cleanup","tray_created":tray_created,"tray_dropped":host.tray.is_none(),"tray_native_window_destroyed":tray_window_destroyed,"duplicate_activation_exit":activation,"same_main_window":d.window_id.is_some() && d.window_id==host.window.as_ref().map(|w|w.id()),"quit_requested_while_hidden":host.window.as_ref().is_some_and(|w|w.is_visible()==Some(false))}));
+    }
+    if let Some(d) = &mut host.diagnostic
+        && d.navigation
+    {
+        d.samples.push(serde_json::json!({"state":"navigation_cleanup","same_main_window":d.window_id.is_some() && d.window_id==host.window.as_ref().map(|w|w.id())}));
     }
     if let Some(c) = &host.capture {
         c.report()?;

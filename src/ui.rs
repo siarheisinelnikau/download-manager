@@ -142,7 +142,7 @@ impl App {
             .filter(|d| d.status != Status::Completed)
             .count()
             .min(4);
-        (400, (232 + count * 124).clamp(300, 600) as u32)
+        (400, (192 + count * 120).clamp(240, 600) as u32)
     }
 
     pub fn popup(&mut self, ctx: &egui::Context) -> Option<crate::tray::Command> {
@@ -165,7 +165,11 @@ impl App {
                     ui.add(egui::Image::new(&self.icon).fit_to_exact_size(Vec2::splat(24.)));
                     ui.label(RichText::new("Downloads").size(18.).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("Hide").clicked() {
+                        let close = ui.small_button("×").on_hover_text("Close · Esc");
+                        close.widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close popup")
+                        });
+                        if close.clicked() {
                             action = Some(crate::tray::Command::Popup { x: 0., y: 0. });
                         }
                         if ui
@@ -310,27 +314,12 @@ impl App {
                     });
                 ui.add_space(6.);
                 ui.horizontal(|ui| {
-                    if ui.add(primary(ui, "Open downloads")).clicked() {
+                    if ui
+                        .add_sized([ui.available_width(), 34.], primary(ui, "Open downloads"))
+                        .clicked()
+                    {
                         action = Some(crate::tray::Command::Queue);
                     }
-                    if ui.button("Settings").clicked() {
-                        action = Some(crate::tray::Command::Settings);
-                    }
-                    ui.menu_button("More", |ui| {
-                        if ui.button("Pause all").clicked() {
-                            self.send(Command::PauseAll);
-                            ui.close();
-                        }
-                        if ui.button("Resume paused").clicked() {
-                            self.send(Command::ResumeAll);
-                            ui.close();
-                        }
-                        ui.separator();
-                        if ui.button("Quit DownloadManager").clicked() {
-                            action = Some(crate::tray::Command::Quit);
-                            ui.close();
-                        }
-                    });
                 });
             });
         action
@@ -344,6 +333,9 @@ impl App {
             self.settings_open = true;
             self.saved_settings = false;
         }
+    }
+    pub fn settings_visible(&self) -> bool {
+        self.settings_open
     }
 
     fn choose_folder(&mut self, target: FolderTarget) {
@@ -578,48 +570,61 @@ impl App {
 
     fn settings_page(&mut self, ui: &mut egui::Ui, snapshot: &Snapshot) {
         let colors = palette(ui.ctx());
+        ui.spacing_mut().item_spacing.y = 8.;
+        ui.spacing_mut().button_padding = egui::vec2(12., 6.);
+        ui.spacing_mut().interact_size.y = 32.;
+        ui.spacing_mut().scroll.floating = false;
         ui.horizontal(|ui| {
-            if ui.button("Back to downloads").clicked() {
+            if ui.button("‹ Downloads").clicked() {
                 self.settings_open = false;
             }
-            ui.label(RichText::new("Settings").size(28.0).strong());
+            ui.label(RichText::new("Settings").size(22.0).strong());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.selectable_value(&mut self.settings.theme, Theme::Light, "Light");
-                ui.selectable_value(&mut self.settings.theme, Theme::Dark, "Dark");
-                ui.label("Theme");
+                ui.label(
+                    RichText::new(format!("Version {VERSION}"))
+                        .size(13.)
+                        .color(colors.muted),
+                );
             });
         });
-        ui.add_space(10.0);
-        let scroll_height = (ui.available_height() - 76.0).max(160.0);
+        ui.add_space(6.0);
+        let scroll_height = (ui.available_height() - 52.0).max(120.0);
         egui::ScrollArea::vertical().id_salt("settings").max_height(scroll_height).auto_shrink([false, false]).show(ui, |ui| {
-            ui.set_max_width(720.0);
-            section(ui, "Download defaults");
-            ui.label("Save new downloads to");
+            section(ui, "Downloads");
+            ui.label("Save folder");
             if folder_field(ui, &mut self.settings_directory, self.folder_pending.is_some()) {
                 self.choose_folder(FolderTarget::Defaults);
             }
-            secondary(ui, "You can choose another folder for each download.");
-            ui.add_space(6.0);
-            egui::Grid::new("download_limits").num_columns(2).spacing([24.0, 12.0]).show(ui, |ui| {
+            egui::Grid::new("download_limits").num_columns(2).spacing([24.0, 8.0]).show(ui, |ui| {
                 ui.label("Simultaneous downloads");
-                egui::ComboBox::from_id_salt("concurrency").selected_text(self.settings.concurrency.to_string()).width(100.0).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("concurrency").selected_text(self.settings.concurrency.to_string()).width(84.0).show_ui(ui, |ui| {
                     for count in 1..=4 { ui.selectable_value(&mut self.settings.concurrency, count, count.to_string()); }
                 }); ui.end_row();
-                ui.label("Total speed limit");
+                ui.label("Bandwidth");
                 ui.horizontal(|ui| {
                     let mut limited = self.settings.bandwidth_kib > 0;
                     if ui.checkbox(&mut limited, "Limit speed").changed() { self.settings.bandwidth_kib = if limited { 1024 } else { 0 }; }
                     if limited { ui.add(egui::DragValue::new(&mut self.settings.bandwidth_kib).range(1..=1_048_576).suffix(" KiB/s")); }
                 }); ui.end_row();
             });
-            ui.add_space(14.0); ui.separator(); ui.add_space(8.0);
-            ui.checkbox(&mut self.settings.close_to_tray,"Keep downloads running when the window closes");
-            secondary(ui,"Close hides the window. Use Quit in the tray menu to save and exit.");
-            ui.add_space(8.0);ui.separator();ui.add_space(8.0);
-            ui.horizontal(|ui| { section(ui, "Updates"); ui.label(RichText::new(format!("Version {VERSION}")).color(colors.muted)); });
-            ui.checkbox(&mut self.settings.startup_update_check, "Check for updates when DownloadManager starts");
+            ui.add_space(4.0); ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Theme");
+                egui::ComboBox::from_id_salt("theme").selected_text(match self.settings.theme { Theme::Dark => "Dark", Theme::Light => "Light" }).width(120.).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.settings.theme, Theme::Dark, "Dark");
+                    ui.selectable_value(&mut self.settings.theme, Theme::Light, "Light");
+                });
+            });
+            ui.checkbox(&mut self.settings.close_to_tray,"Keep downloading when the window closes").on_hover_text("Closing hides the window in the tray. Use Quit in the tray menu to save and exit.");
+            ui.separator();
             let busy = matches!(snapshot.update, UpdateStatus::Checking | UpdateStatus::Downloading { .. } | UpdateStatus::Staged(_));
-            if ui.add_enabled(!busy, egui::Button::new("Check for updates")).clicked() { self.send(Command::CheckUpdates); }
+            ui.horizontal(|ui| {
+                section(ui, "Updates");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.add_enabled(!busy, egui::Button::new("Check for updates")).clicked() { self.send(Command::CheckUpdates); }
+                });
+            });
+            ui.checkbox(&mut self.settings.startup_update_check, "Check automatically at startup");
             match &snapshot.update {
                 UpdateStatus::Idle => {}
                 UpdateStatus::Checking => { secondary(ui, "Checking for an update…"); }
@@ -640,13 +645,13 @@ impl App {
                 UpdateStatus::Staged(_) => { secondary(ui, "Update verified. Saving your queue before restarting…"); }
             }
         });
-        ui.add_space(8.0);
+        ui.add_space(4.0);
         ui.separator();
-        ui.add_space(8.0);
+        ui.add_space(4.0);
         let mut draft = self.settings.clone();
         draft.default_directory = PathBuf::from(&self.settings_directory);
         let changed = draft != snapshot.state.settings;
-        ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
                 .add_enabled(changed, primary(ui, "Save changes"))
                 .clicked()
@@ -656,7 +661,7 @@ impl App {
             if self.saved_settings && !changed && snapshot.notice.is_none() {
                 ui.colored_label(colors.success, "Changes saved");
             } else if changed {
-                secondary(ui, "Changes haven't been saved yet.");
+                secondary(ui, "Unsaved changes");
             }
         });
     }
@@ -815,7 +820,7 @@ impl App {
             .frame(
                 egui::Frame::new()
                     .fill(colors.background)
-                    .inner_margin(24.0),
+                    .inner_margin(if self.settings_open { 18.0 } else { 24.0 }),
             )
             .show(ctx, |ui| {
                 if self.settings_open {
