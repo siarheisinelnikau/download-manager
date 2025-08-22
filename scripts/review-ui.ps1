@@ -69,7 +69,7 @@ try {
         Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots "tray-popup$suffix.png") 'populated'
         Invoke-Review '--capture-ui' 'new' (Join-Path $screenshots "new-download$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'main' (Join-Path $fixture 'empty.png') 'empty'
-        Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('760','540')
+        Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('560','440')
     }
     if (-not $Diagnose) {
         $iconProcess = Start-Process -FilePath $package.AssetPath -ArgumentList @('--export-icon', (Join-Path $screenshots 'application-icon.png')) -WindowStyle Hidden -PassThru

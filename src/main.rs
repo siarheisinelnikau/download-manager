@@ -69,8 +69,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let size = if args.len() == 6 {
             let width: u32 = args[4].to_str().ok_or("Invalid width")?.parse()?;
             let height: u32 = args[5].to_str().ok_or("Invalid height")?.parse()?;
-            if !(760..=1920).contains(&width) || !(540..=1080).contains(&height) {
-                return Err("Capture size must be 760..1920 by 540..1080 logical pixels".into());
+            let (min_width, min_height) = if view == "settings" {
+                (560, 440)
+            } else {
+                (760, 540)
+            };
+            if !(min_width..=1920).contains(&width) || !(min_height..=1080).contains(&height) {
+                return Err("Capture size is outside the supported logical window bounds".into());
             }
             Some((width, height))
         } else {
@@ -80,11 +85,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if args.get(1).is_some_and(|a| a == "--diagnose-ui") {
         if args.len() != 4 || std::env::var_os("DOWNLOAD_MANAGER_DATA_DIR").is_none() {
-            return Err("Usage: --diagnose-ui main|settings|popup|new|tray OUTPUT.json (requires DOWNLOAD_MANAGER_DATA_DIR)".into());
+            return Err("Usage: --diagnose-ui main|settings|popup|new|navigation|tray OUTPUT.json (requires DOWNLOAD_MANAGER_DATA_DIR)".into());
         }
         let view = args[2].to_str().ok_or("Invalid diagnostic view")?;
-        if !matches!(view, "main" | "settings" | "popup" | "new" | "tray") {
-            return Err("Diagnostic view must be main, settings, popup, new or tray".into());
+        if !matches!(
+            view,
+            "main" | "settings" | "popup" | "new" | "navigation" | "tray"
+        ) {
+            return Err(
+                "Diagnostic view must be main, settings, popup, new, navigation or tray".into(),
+            );
         }
         return window::run_diagnostic(view, std::path::PathBuf::from(&args[3]));
     }
