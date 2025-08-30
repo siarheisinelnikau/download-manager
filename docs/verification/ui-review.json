@@ -1,66 +1,80 @@
 {
   "date": "2026-11-01",
-  "code_revision": "c037b99f00930be558173f7ac836258b5c25a377",
-  "sha256": "b65c0a03a54ea836ec9263aaa9fdda65e01de1d16b06104ec48954ec93d11f1d",
+  "code_revision": "081ae31e09f2f2ba45ea6a2972a7d6308f8ed026",
+  "executable": "DownloadManager-v0.1.2.exe",
+  "sha256": "7eef43988b6ec863989bb7c4a23ce4b34e3d70df8048bbaab5ba60bf99cdd4e3",
   "default_theme": "Dark",
   "renderer": "CPU rasterization and Win32 GDI",
   "scope": "Real client-area bitmaps from the packaged executable; synthetic fixtures; no Computer Use",
   "views": [
     {
-      "logical_height": 680,
-      "fixture": "Synthetic paused/error queue",
       "logical_width": 960,
+      "fixture": "Synthetic paused/error queue",
+      "logical_height": 680,
       "image": "docs/screenshots/main-window.png",
       "theme": "Dark"
     },
     {
-      "logical_height": 680,
-      "fixture": "Isolated defaults; startup update checks disabled",
-      "logical_width": 960,
+      "logical_width": 620,
+      "fixture": "Isolated empty state; startup checks disabled",
+      "logical_height": 500,
       "image": "docs/screenshots/settings.png",
       "theme": "Dark"
     },
     {
-      "logical_height": 480,
-      "fixture": "Synthetic paused/error queue",
       "logical_width": 400,
+      "fixture": "Synthetic paused/error queue",
+      "logical_height": 432,
       "image": "docs/screenshots/tray-popup.png",
       "theme": "Dark"
     },
     {
-      "logical_height": 680,
-      "fixture": "Synthetic paused/error queue",
       "logical_width": 960,
+      "fixture": "Isolated empty state; startup checks disabled",
+      "logical_height": 680,
+      "image": "docs/screenshots/new-download.png",
+      "theme": "Dark"
+    },
+    {
+      "logical_width": 960,
+      "fixture": "Synthetic paused/error queue",
+      "logical_height": 680,
       "image": "docs/screenshots/main-window-light.png",
       "theme": "Light"
     },
     {
-      "logical_height": 680,
-      "fixture": "Isolated defaults; startup update checks disabled",
-      "logical_width": 960,
+      "logical_width": 620,
+      "fixture": "Isolated empty state; startup checks disabled",
+      "logical_height": 500,
       "image": "docs/screenshots/settings-light.png",
       "theme": "Light"
     },
     {
-      "logical_height": 480,
-      "fixture": "Synthetic paused/error queue",
       "logical_width": 400,
+      "fixture": "Synthetic paused/error queue",
+      "logical_height": 432,
       "image": "docs/screenshots/tray-popup-light.png",
+      "theme": "Light"
+    },
+    {
+      "logical_width": 960,
+      "fixture": "Isolated empty state; startup checks disabled",
+      "logical_height": 680,
+      "image": "docs/screenshots/new-download-light.png",
       "theme": "Light"
     }
   ],
   "other_assets": [
     {
       "image": "docs/screenshots/application-icon.png",
-      "kind": "64px export of shared code-native icon source"
+      "kind": "Shared icon source export"
     }
   ],
   "other_reviewed_states": [
     "Empty queue in both themes",
-    "Settings at 760x540 in both themes"
+    "Settings at 560x440 in both themes"
   ],
   "ordinary_input_verified": false,
   "native_tray_verified": false,
-  "native_tray_test": "Explicitly skipped for theme review; preceding blocked evidence retained in runtime-tray.json",
-  "executable": "DownloadManager-v0.1.1.exe"
+  "native_tray_test": "Not repeated; preceding blocked Shell evidence retained in runtime-tray.json"
 }

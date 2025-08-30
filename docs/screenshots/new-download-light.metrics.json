@@ -1,0 +1,28 @@
+{
+  "captured": true,
+  "frame_count": 3,
+  "frames": [
+    {
+      "present_ms": 0.6432,
+      "raster_ms": 3.0143,
+      "total_ms": 4.9213,
+      "ui_ms": 1.2638
+    },
+    {
+      "present_ms": 3.5189000000000004,
+      "raster_ms": 3.0537,
+      "total_ms": 7.0655,
+      "ui_ms": 0.4929
+    },
+    {
+      "present_ms": 0.7493000000000001,
+      "raster_ms": 3.6416999999999997,
+      "total_ms": 5.5901,
+      "ui_ms": 1.1991
+    }
+  ],
+  "median_total_ms": 5.5901,
+  "p95_total_ms": 5.5901,
+  "renderer": "CPU rasterizer / Win32 GDI",
+  "scope": "Native client area; actual presented pixels"
+}

@@ -1,8 +1,18 @@
-# DownloadManager v0.1.1 — local build notes
+# DownloadManager v0.1.2 — local build notes
 
-This build replaces the previously shared 0.1.0 development builds. No published release exists; publication is not part of the current work.
+This build replaces the previously shared 0.1.1 development build. No published release exists; publication is not part of the current work.
 
-## Changed since the shared 0.1.0 build
+## Changed since the shared 0.1.1 build
+
+- Compact 620×500 settings with tighter rows, a single Dark/Light theme dropdown and queue geometry restored when returning to Downloads. The save action remains fixed while smaller windows scroll.
+- A simpler tray popup containing quick file actions, New download and Open downloads. Settings and More are removed from the popup; the native tray menu keeps the full controls. A close cross with an Escape tooltip replaces Hide.
+- Browse buttons beside the download-folder fields in Settings and New download open the standard Windows folder picker. Manual path entry remains available.
+- The picker starts in the current existing folder or an existing parent, accepts filesystem folders and preserves the original field on cancellation. Changing the default folder remains a draft until Save changes.
+- One dedicated STA worker keeps the application event loop available. Results return through the native dispatcher, with errors shown in the relevant form and stale results ignored after navigation.
+- Real new-download screenshots and capture readiness now account for the form's initial layout pass. The unused pre-check hint was removed to keep the settings page compact after adding the folder controls.
+- A bounded native navigation diagnostic checks queue-to-settings sizing, hidden/restored operation and reuse of the same window.
+
+## Previous 0.1.1 packaging changes
 
 - The application, Windows file/product properties and executable filename now identify this build as 0.1.1, so successive delivered builds can be distinguished.
 - Packaging, inspection and screenshot scripts resolve the executable name from Cargo metadata. They no longer launch a fixed 0.1.0 filename.
@@ -27,10 +37,12 @@ This build replaces the previously shared 0.1.0 development builds. No published
 
 ## Platform and assets
 
-Intended for Windows 10/11 x64. The portable MSVC build uses a static CRT and CPU/GDI rendering, without an application OpenGL/DirectX dependency. Single-architecture asset: `DownloadManager-v0.1.1.exe`, accompanied by `SHA256SUMS.txt`, MIT and dependency notices.
+Intended for Windows 10/11 x64. The portable MSVC build uses a static CRT and CPU/GDI rendering, without an application OpenGL/DirectX dependency. Single-architecture asset: `DownloadManager-v0.1.2.exe`, accompanied by `SHA256SUMS.txt`, MIT and dependency notices.
 
 ## Known limitations and validation
 
 This is a local, unpublished implementation. All 27 offline tests, native client-area screenshots, packaged icon decoding and bounded rendering diagnostics are verified. The earlier native tray test was rejected with Windows error 5; actual Shell placement, tray cleanup and mouse/menu gestures need validation on an unrestricted desktop. Actual keyboard/clipboard interaction, real HTTP/TLS transport, broader platform compatibility and update installation/restart remain pending. Sandbox policy blocks outgoing loopback sockets. Screenshot fixtures use synthetic data; they do not demonstrate live Internet downloads.
+
+The native picker component and initial-folder round trip can be probed without showing a dialog. Actual folder selection and cancellation through Windows UI remain a separate interactive check; no Computer Use was performed.
 
 Resume requires a strong ETag and a valid matching range response. Servers without a strong validator require an explicit restart after interruption. Each file uses a single connection; browser integration, authentication/cookies, scheduled transfers and segmented downloading are not included. Downloads never run automatically. There is no claim of universal acceleration or resume support.
