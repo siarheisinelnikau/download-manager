@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-01",
+  "code_revision": "081ae31e09f2f2ba45ea6a2972a7d6308f8ed026",
+  "executable": "DownloadManager-v0.1.2.exe",
+  "sha256": "7eef43988b6ec863989bb7c4a23ce4b34e3d70df8048bbaab5ba60bf99cdd4e3",
+  "cases": [
+    {
+      "dialog_shown": false,
+      "configured": true,
+      "fixture": "ascii",
+      "error": null
+    },
+    {
+      "dialog_shown": false,
+      "configured": true,
+      "fixture": "unicode",
+      "error": null
+    }
+  ],
+  "scope": "Production IFileOpenDialog configuration and initial-folder round trip, without Show",
+  "limitations": "Actual selection, cancellation and native window ownership require interactive verification; no Computer Use performed."
+}

@@ -1,9 +1,9 @@
 {
-  "Path": "DownloadManager-v0.1.1.exe",
-  "Bytes": 8042496,
-  "FileVersion": "0.1.1",
-  "ProductVersion": "0.1.1",
-  "OriginalFilename": "DownloadManager-v0.1.1.exe",
+  "Path": "DownloadManager-v0.1.2.exe",
+  "Bytes": 8071680,
+  "FileVersion": "0.1.2",
+  "ProductVersion": "0.1.2",
+  "OriginalFilename": "DownloadManager-v0.1.2.exe",
   "Machine": "x64",
   "Subsystem": "Windows GUI",
   "IconResources": true,
@@ -24,13 +24,14 @@
     "dwmapi.dll",
     "gdi32.dll",
     "imm32.dll",
-    "kernel32.dll",
+    "KERNEL32.dll",
     "ntdll.dll",
     "ole32.dll",
+    "oleaut32.dll",
     "shell32.dll",
     "USER32.dll",
     "uxtheme.dll",
     "ws2_32.dll"
   ],
-  "sha256": "b65c0a03a54ea836ec9263aaa9fdda65e01de1d16b06104ec48954ec93d11f1d"
+  "sha256": "7eef43988b6ec863989bb7c4a23ce4b34e3d70df8048bbaab5ba60bf99cdd4e3"
 }
