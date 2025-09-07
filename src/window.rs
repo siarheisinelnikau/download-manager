@@ -58,6 +58,7 @@ struct FrameTiming {
 }
 
 struct Capture {
+    popup_layout: Option<serde_json::Value>,
     new_download: bool,
     path: PathBuf,
     settings: bool,
@@ -71,6 +72,7 @@ struct Capture {
 impl Capture {
     fn new(path: PathBuf, view: &str) -> Self {
         Self {
+            popup_layout: None,
             new_download: view == "new",
             path,
             settings: view == "settings",
@@ -121,7 +123,7 @@ impl Capture {
                 .unwrap_or_default()
         };
         let report = serde_json::json!({"renderer":"CPU rasterizer / Win32 GDI", "scope":"Native client area; actual presented pixels", "captured":self.saved,
-            "frame_count":self.frames.len(), "median_total_ms":at(50), "p95_total_ms":at(95), "frames":self.frames});
+            "frame_count":self.frames.len(), "median_total_ms":at(50), "p95_total_ms":at(95), "frames":self.frames,"popup_layout":self.popup_layout});
         std::fs::write(
             self.path.with_extension("metrics.json"),
             serde_json::to_vec_pretty(&report)?,
@@ -198,7 +200,10 @@ impl Diagnostic {
         };
         let size = window.inner_size();
         let scale = window.scale_factor();
-        self.samples.push(serde_json::json!({"state":state, "seconds":elapsed, "logical_size":[size.width as f64/scale,size.height as f64/scale], "counts":counters.since(self.baseline),
+        let outer = window.outer_size();
+        let position = window.outer_position().ok();
+        self.samples.push(serde_json::json!({"state":state, "seconds":elapsed, "logical_size":[size.width as f64/scale,size.height as f64/scale],
+            "outer_rect":position.map(|p|[p.x as f64,p.y as f64,p.x as f64+outer.width as f64,p.y as f64+outer.height as f64]), "counts":counters.since(self.baseline),
             "cpu_one_core_percent": self.cpu.zip(cpu).map(|(before,after)|100.0*(after-before)/elapsed), "minimized":window.is_minimized(), "visible":window.is_visible()}));
         if changed && self.idle_retries == 0 {
             self.idle_retries = 1;
@@ -319,6 +324,8 @@ struct CpuHost {
     capture: Option<Capture>,
     diagnostic: Option<Diagnostic>,
     size: (u32, u32),
+    popup_review_sized: bool,
+    explicit_review_size: bool,
 }
 impl CpuHost {
     fn new(proxy: EventLoopProxy<UserEvent>) -> Self {
@@ -373,6 +380,8 @@ impl CpuHost {
             capture: None,
             diagnostic: None,
             size: (960, 680),
+            popup_review_sized: false,
+            explicit_review_size: false,
         }
     }
     fn hidden(&self) -> bool {
@@ -499,7 +508,10 @@ impl CpuHost {
         self.schedule(Instant::now());
     }
     fn restore_full(&mut self) {
-        let Some(window) = &self.window else {
+        self.restore_with_anchor(None);
+    }
+    fn restore_with_anchor(&mut self, settings_anchor: Option<(f64, f64)>) {
+        let Some(window) = self.window.clone() else {
             return;
         };
         if self.popup || (self.settings_compact && !self.app.as_ref().unwrap().settings_visible()) {
@@ -523,6 +535,13 @@ impl CpuHost {
             }
             self.ctx.memory_mut(|m| m.reset_areas());
         }
+        self.occluded = false;
+        self.sync_settings_window();
+        if let Some(anchor) = settings_anchor
+            && self.app.as_ref().unwrap().settings_visible()
+        {
+            self.place_settings_near(anchor);
+        }
         window.set_visible(true);
         if window.is_minimized() == Some(true) {
             window.set_minimized(false);
@@ -530,9 +549,42 @@ impl CpuHost {
         if self.diagnostic.is_none() {
             window.focus_window();
         }
-        self.occluded = false;
-        self.sync_settings_window();
         self.schedule(Instant::now());
+    }
+    fn place_settings_near(&self, anchor: (f64, f64)) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        let work = crate::tray::work_area(anchor).unwrap_or((0., 0., 1920., 1080.));
+        // Move onto the tray's monitor before reading its DPI and native frame size.
+        let outer = window.outer_size();
+        let (x, y) =
+            crate::tray::popup_origin(anchor, (outer.width as f64, outer.height as f64), work);
+        window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
+        let scale = window.scale_factor();
+        let outer = window.outer_size();
+        let inner = window.inner_size();
+        let frame = (
+            outer.width.saturating_sub(inner.width),
+            outer.height.saturating_sub(inner.height),
+        );
+        let width = 620f64.min(((work.2 - work.0 - 16. - frame.0 as f64) / scale).max(1.));
+        let height = 500f64.min(((work.3 - work.1 - 16. - frame.1 as f64) / scale).max(1.));
+        window.set_min_inner_size(Some(LogicalSize::new(
+            560f64.min(width),
+            440f64.min(height),
+        )));
+        let size = LogicalSize::new(width, height).to_physical::<u32>(scale);
+        let _ = window.request_inner_size(size);
+        let (x, y) = crate::tray::popup_origin(
+            anchor,
+            (
+                (size.width + frame.0) as f64,
+                (size.height + frame.1) as f64,
+            ),
+            work,
+        );
+        window.set_outer_position(winit::dpi::PhysicalPosition::new(x, y));
     }
     fn place_popup(&self) {
         let (Some(window), Some(anchor)) = (&self.window, self.popup_anchor) else {
@@ -631,8 +683,13 @@ impl CpuHost {
                 self.restore_full();
             }
             T::Settings => {
+                let anchor = self
+                    .tray
+                    .as_ref()
+                    .and_then(|t| t.anchor())
+                    .or(self.popup_anchor);
                 self.app.as_mut().unwrap().open_settings();
-                self.restore_full();
+                self.restore_with_anchor(anchor);
             }
             T::NewDownload => {
                 self.app.as_mut().unwrap().show_new_download();
@@ -663,6 +720,17 @@ impl CpuHost {
         }
         let start = Instant::now();
         let window = self.window.as_ref().unwrap();
+        if self.popup
+            && (self.capture.is_some() || self.diagnostic.is_some())
+            && !self.popup_review_sized
+            && self.app.as_ref().unwrap().ready()
+        {
+            self.popup_review_sized = true;
+            if !self.explicit_review_size {
+                self.size = self.app.as_ref().unwrap().popup_size();
+                let _ = window.request_inner_size(LogicalSize::new(self.size.0, self.size.1));
+            }
+        }
         let size = window.inner_size();
         let (Some(width), Some(height)) =
             (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
@@ -719,7 +787,12 @@ impl CpuHost {
             && self
                 .capture
                 .as_ref()
-                .is_none_or(|c| !(c.settings || c.new_download) || c.opened);
+                .is_none_or(|c| !(c.settings || c.new_download) || c.opened)
+            && (!self.popup
+                || (self.popup_review_sized
+                    && size
+                        == LogicalSize::new(self.size.0, self.size.1)
+                            .to_physical::<u32>(window.scale_factor())));
         let input = self.input.as_mut().unwrap();
         egui_winit::update_viewport_info(
             input
@@ -826,6 +899,24 @@ impl CpuHost {
                 capture.ready_frames += 1;
             }
             if capture.ready_frames >= 2 && !capture.saved {
+                if capture.popup {
+                    let (content, footer) = self
+                        .app
+                        .as_ref()
+                        .unwrap()
+                        .popup_bounds()
+                        .ok_or("Popup capture has no footer layout")?;
+                    let inside = content.contains_rect(footer);
+                    capture.popup_layout = Some(serde_json::json!({
+                        "content":[content.left(),content.top(),content.right(),content.bottom()],
+                        "footer":[footer.left(),footer.top(),footer.right(),footer.bottom()],
+                        "footer_inside_content":inside,
+                        "bottom_inset":self.ctx.content_rect().bottom()-footer.bottom(),
+                    }));
+                    if !inside {
+                        return Err("Popup footer is clipped outside its content bounds".into());
+                    }
+                }
                 capture.save(&self.retained, size.width, size.height)?;
                 close_capture = true;
             } else if capture.ready_frames > 0 {
@@ -1075,7 +1166,25 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                 let phase = self.diagnostic.as_ref().unwrap().phase;
                 if phase != old_phase {
                     match phase {
-                        1 => self.dispatch_tray(event_loop, crate::tray::Command::Settings),
+                        1 => {
+                            let monitor = self.window.as_ref().unwrap().current_monitor();
+                            let point = monitor
+                                .map(|m| {
+                                    let p = m.position();
+                                    let s = m.size();
+                                    (
+                                        p.x as f64 + s.width as f64 / 2.,
+                                        p.y as f64 + s.height as f64 / 2.,
+                                    )
+                                })
+                                .unwrap_or((0., 0.));
+                            if let Some(work) = crate::tray::work_area(point) {
+                                let anchor = (work.2 - 24., work.3);
+                                self.popup_anchor = Some(anchor);
+                                self.diagnostic.as_mut().unwrap().samples.push(serde_json::json!({"state":"synthetic_tray_anchor","anchor":[anchor.0,anchor.1],"work_area":[work.0,work.1,work.2,work.3]}));
+                            }
+                            self.dispatch_tray(event_loop, crate::tray::Command::Settings);
+                        }
                         3 => self.dispatch_tray(event_loop, crate::tray::Command::Queue),
                         _ => {}
                     }
@@ -1176,6 +1285,7 @@ fn run_mode(
     }
     if let Some(size) = size {
         host.size = size;
+        host.explicit_review_size = true;
     }
     event_loop.run_app(&mut host)?;
     let tray_created = host.tray.is_some();

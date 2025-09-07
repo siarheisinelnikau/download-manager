@@ -44,6 +44,10 @@ try {
         if (-not $process.WaitForExit($timeout)) { Stop-Process -Id $process.Id -Force; throw "Owned diagnostic timed out: $View $Scenario" }
         if ($process.ExitCode -ne 0) { throw "Review failed: $(Get-Content -LiteralPath $log -Raw)" }
         if (-not (Test-Path -LiteralPath $Output)) { throw "No output: $Output" }
+        if ($Mode -eq '--capture-ui' -and $View -eq 'popup') {
+            $metrics = Get-Content -LiteralPath ([IO.Path]::ChangeExtension($Output,'metrics.json')) -Raw | ConvertFrom-Json
+            if (-not $metrics.popup_layout.footer_inside_content -or $metrics.popup_layout.bottom_inset -lt 15) { throw "Popup footer clipping detected: $Output" }
+        }
         if ($Mode -eq '--diagnose-ui') {
             $report = Get-Content -LiteralPath $Output -Raw | ConvertFrom-Json
             if (-not $report.complete -or -not $report.idle_hidden_render_gate) { throw "Rendering gate failed: $Output" }
@@ -61,12 +65,15 @@ try {
         Invoke-Review '--diagnose-ui' 'main' (Join-Path $fixture 'runtime-main.json') 'populated'
         Invoke-Review '--diagnose-ui' 'settings' (Join-Path $fixture 'runtime-settings.json') 'empty'
         Invoke-Review '--diagnose-ui' 'popup' (Join-Path $fixture 'runtime-popup.json') 'populated'
+        Invoke-Review '--diagnose-ui' 'popup' (Join-Path $fixture 'runtime-popup-empty.json') 'empty'
         Invoke-Review '--diagnose-ui' 'new' (Join-Path $fixture 'runtime-new.json') 'empty'
         if (-not $SkipTray) { Invoke-Review '--diagnose-ui' 'tray' (Join-Path $fixture 'runtime-tray.json') 'populated' }
     } else {
         Invoke-Review '--capture-ui' 'main' (Join-Path $screenshots "main-window$suffix.png") 'populated'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $screenshots "settings$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots "tray-popup$suffix.png") 'populated'
+        Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots "tray-popup-empty$suffix.png") 'empty'
+        Invoke-Review '--capture-ui' 'popup' (Join-Path $fixture 'popup-minimum.png') 'empty' @('360','220')
         Invoke-Review '--capture-ui' 'new' (Join-Path $screenshots "new-download$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'main' (Join-Path $fixture 'empty.png') 'empty'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('560','440')
