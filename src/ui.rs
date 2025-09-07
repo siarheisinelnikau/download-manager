@@ -13,6 +13,7 @@ use egui::{Color32, RichText, Stroke, Vec2};
 use std::{path::PathBuf, sync::Arc};
 
 pub struct App {
+    popup_bounds: Option<(egui::Rect, egui::Rect)>,
     icon: egui::TextureHandle,
     applied_theme: Theme,
     manager: Option<Manager>,
@@ -68,6 +69,7 @@ impl App {
             Err(e) => (None, Some(format!("{e:#}"))),
         };
         Self {
+            popup_bounds: None,
             icon,
             applied_theme: Theme::Dark,
             manager,
@@ -142,10 +144,14 @@ impl App {
             .filter(|d| d.status != Status::Completed)
             .count()
             .min(4);
-        (400, (192 + count * 120).clamp(240, 600) as u32)
+        (400, (192 + count * 120).clamp(272, 600) as u32)
+    }
+    pub fn popup_bounds(&self) -> Option<(egui::Rect, egui::Rect)> {
+        self.popup_bounds
     }
 
     pub fn popup(&mut self, ctx: &egui::Context) -> Option<crate::tray::Command> {
+        self.popup_bounds = None;
         let snapshot = self.snapshot();
         self.sync_theme(ctx, &snapshot);
         let colors = palette(ctx);
@@ -161,6 +167,7 @@ impl App {
                     .inner_margin(16.),
             )
             .show(ctx, |ui| {
+                let popup_bounds = ui.max_rect();
                 ui.horizontal(|ui| {
                     ui.add(egui::Image::new(&self.icon).fit_to_exact_size(Vec2::splat(24.)));
                     ui.label(RichText::new("Downloads").size(18.).strong());
@@ -217,12 +224,26 @@ impl App {
                     Status::Failed => 4,
                     _ => 5,
                 });
-                let available = (ui.available_height() - 54.).max(80.);
+                let footer_height = (ui.text_style_height(&egui::TextStyle::Button)
+                    + 2. * ui.spacing().button_padding.y)
+                    .max(ui.spacing().interact_size.y)
+                    .ceil();
+                let footer_rect = egui::Rect::from_min_max(
+                    egui::pos2(popup_bounds.left(), popup_bounds.bottom() - footer_height),
+                    popup_bounds.max,
+                );
+                let body_rect = egui::Rect::from_min_max(
+                    ui.cursor().min,
+                    egui::pos2(popup_bounds.right(), footer_rect.top() - 12.),
+                );
+                let mut body = ui.new_child(egui::UiBuilder::new().max_rect(body_rect));
+                body.set_clip_rect(body_rect.intersect(ui.clip_rect()));
+                body.spacing_mut().scroll.floating = false;
                 egui::ScrollArea::vertical()
                     .id_salt("tray_downloads")
-                    .max_height(available)
+                    .max_height(body_rect.height().max(1.))
                     .auto_shrink([false, false])
-                    .show(ui, |ui| {
+                    .show(&mut body, |ui| {
                         if jobs.is_empty() {
                             ui.add_space(18.);
                             section(ui, "No downloads waiting");
@@ -312,15 +333,11 @@ impl App {
                             ui.separator();
                         }
                     });
-                ui.add_space(6.);
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_sized([ui.available_width(), 34.], primary(ui, "Open downloads"))
-                        .clicked()
-                    {
-                        action = Some(crate::tray::Command::Queue);
-                    }
-                });
+                let footer = ui.put(footer_rect, primary(ui, "Open downloads"));
+                self.popup_bounds = Some((popup_bounds, footer.rect));
+                if footer.clicked() {
+                    action = Some(crate::tray::Command::Queue);
+                }
             });
         action
     }

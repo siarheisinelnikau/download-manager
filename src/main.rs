@@ -69,10 +69,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let size = if args.len() == 6 {
             let width: u32 = args[4].to_str().ok_or("Invalid width")?.parse()?;
             let height: u32 = args[5].to_str().ok_or("Invalid height")?.parse()?;
-            let (min_width, min_height) = if view == "settings" {
-                (560, 440)
-            } else {
-                (760, 540)
+            let (min_width, min_height) = match view {
+                "settings" => (560, 440),
+                "popup" => (360, 220),
+                _ => (760, 540),
             };
             if !(min_width..=1920).contains(&width) || !(min_height..=1080).contains(&height) {
                 return Err("Capture size is outside the supported logical window bounds".into());
