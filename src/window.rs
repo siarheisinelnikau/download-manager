@@ -514,6 +514,10 @@ impl CpuHost {
         let Some(window) = self.window.clone() else {
             return;
         };
+        // Restore normal geometry before saving it or moving an anchored settings window.
+        if window.is_minimized() == Some(true) {
+            window.set_minimized(false);
+        }
         if self.popup || (self.settings_compact && !self.app.as_ref().unwrap().settings_visible()) {
             self.popup = false;
             self.settings_compact = false;
@@ -543,9 +547,6 @@ impl CpuHost {
             self.place_settings_near(anchor);
         }
         window.set_visible(true);
-        if window.is_minimized() == Some(true) {
-            window.set_minimized(false);
-        }
         if self.diagnostic.is_none() {
             window.focus_window();
         }
@@ -1183,6 +1184,9 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                                 self.popup_anchor = Some(anchor);
                                 self.diagnostic.as_mut().unwrap().samples.push(serde_json::json!({"state":"synthetic_tray_anchor","anchor":[anchor.0,anchor.1],"work_area":[work.0,work.1,work.2,work.3]}));
                             }
+                            self.window.as_ref().unwrap().set_minimized(true);
+                            let minimized = self.window.as_ref().unwrap().is_minimized();
+                            self.diagnostic.as_mut().unwrap().samples.push(serde_json::json!({"state":"settings_starting_state","minimized":minimized}));
                             self.dispatch_tray(event_loop, crate::tray::Command::Settings);
                         }
                         3 => self.dispatch_tray(event_loop, crate::tray::Command::Queue),
