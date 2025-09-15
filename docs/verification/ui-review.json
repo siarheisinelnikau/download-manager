@@ -1,80 +1,87 @@
 {
   "date": "2026-11-01",
-  "code_revision": "081ae31e09f2f2ba45ea6a2972a7d6308f8ed026",
-  "executable": "DownloadManager-v0.1.2.exe",
-  "sha256": "7eef43988b6ec863989bb7c4a23ce4b34e3d70df8048bbaab5ba60bf99cdd4e3",
+  "code_revision": "9b176c49194f922ef434da9e4826cfae5b6bea56",
+  "executable": "DownloadManager-v0.1.3.exe",
+  "sha256": "2466ce8da6998b30519d7bd5e4376cba221746843a52a9075ba53c6a8bad8b7b",
   "default_theme": "Dark",
   "renderer": "CPU rasterization and Win32 GDI",
-  "scope": "Real client-area bitmaps from the packaged executable; synthetic fixtures; no Computer Use",
+  "scope": "Real application-presented client bitmaps; synthetic fixtures; no Computer Use",
   "views": [
     {
-      "logical_width": 960,
-      "fixture": "Synthetic paused/error queue",
       "logical_height": 680,
       "image": "docs/screenshots/main-window.png",
-      "theme": "Dark"
+      "theme": "Dark",
+      "fixture": "Synthetic paused/error queue",
+      "logical_width": 960
     },
     {
-      "logical_width": 620,
-      "fixture": "Isolated empty state; startup checks disabled",
       "logical_height": 500,
       "image": "docs/screenshots/settings.png",
-      "theme": "Dark"
+      "theme": "Dark",
+      "fixture": "Isolated empty state; startup update checks disabled",
+      "logical_width": 620
     },
     {
-      "logical_width": 400,
-      "fixture": "Synthetic paused/error queue",
       "logical_height": 432,
       "image": "docs/screenshots/tray-popup.png",
-      "theme": "Dark"
+      "theme": "Dark",
+      "fixture": "Synthetic paused/error queue",
+      "logical_width": 400
     },
     {
-      "logical_width": 960,
-      "fixture": "Isolated empty state; startup checks disabled",
+      "logical_height": 272,
+      "image": "docs/screenshots/tray-popup-empty.png",
+      "theme": "Dark",
+      "fixture": "Isolated empty state; startup update checks disabled",
+      "logical_width": 400
+    },
+    {
       "logical_height": 680,
       "image": "docs/screenshots/new-download.png",
-      "theme": "Dark"
+      "theme": "Dark",
+      "fixture": "Isolated empty state; startup update checks disabled",
+      "logical_width": 960
     },
     {
-      "logical_width": 960,
-      "fixture": "Synthetic paused/error queue",
       "logical_height": 680,
       "image": "docs/screenshots/main-window-light.png",
-      "theme": "Light"
+      "theme": "Light",
+      "fixture": "Synthetic paused/error queue",
+      "logical_width": 960
     },
     {
-      "logical_width": 620,
-      "fixture": "Isolated empty state; startup checks disabled",
       "logical_height": 500,
       "image": "docs/screenshots/settings-light.png",
-      "theme": "Light"
+      "theme": "Light",
+      "fixture": "Isolated empty state; startup update checks disabled",
+      "logical_width": 620
     },
     {
-      "logical_width": 400,
-      "fixture": "Synthetic paused/error queue",
       "logical_height": 432,
       "image": "docs/screenshots/tray-popup-light.png",
-      "theme": "Light"
+      "theme": "Light",
+      "fixture": "Synthetic paused/error queue",
+      "logical_width": 400
     },
     {
-      "logical_width": 960,
-      "fixture": "Isolated empty state; startup checks disabled",
+      "logical_height": 272,
+      "image": "docs/screenshots/tray-popup-empty-light.png",
+      "theme": "Light",
+      "fixture": "Isolated empty state; startup update checks disabled",
+      "logical_width": 400
+    },
+    {
       "logical_height": 680,
       "image": "docs/screenshots/new-download-light.png",
-      "theme": "Light"
-    }
-  ],
-  "other_assets": [
-    {
-      "image": "docs/screenshots/application-icon.png",
-      "kind": "Shared icon source export"
+      "theme": "Light",
+      "fixture": "Isolated empty state; startup update checks disabled",
+      "logical_width": 960
     }
   ],
   "other_reviewed_states": [
-    "Empty queue in both themes",
-    "Settings at 560x440 in both themes"
+    "Settings at 560x440 in both themes",
+    "Popup at 360x220 in both themes"
   ],
   "ordinary_input_verified": false,
-  "native_tray_verified": false,
-  "native_tray_test": "Not repeated; preceding blocked Shell evidence retained in runtime-tray.json"
+  "native_tray_verified": false
 }

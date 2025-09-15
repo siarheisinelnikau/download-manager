@@ -1,8 +1,16 @@
-# DownloadManager v0.1.2 — local build notes
+# DownloadManager v0.1.3 — local build notes
 
-This build replaces the previously shared 0.1.1 development build. No published release exists; publication is not part of the current work.
+This build replaces the previously shared 0.1.2 development build. No published release exists; publication is not part of the current work.
 
-## Changed since the shared 0.1.1 build
+## Changed since the shared 0.1.2 build
+
+- Fix the clipped footer in the empty download popup. The button now has its own reserved area, uses its actual styled height and retains the bottom inset while only the list scrolls.
+- Size empty popups to 400×272. Native self-captures now cover empty, populated and constrained popups in both themes and reject footer bounds that escape the content area.
+- Settings opened from the tray appear beside the same tray anchor on its monitor, with native frame dimensions included in work-area clamping. Returning to Downloads restores the queue's original geometry.
+- Restore minimized windows before saving their queue geometry or applying tray-side placement, preventing the old restore position from overriding the anchor.
+- Extend the native navigation diagnostic to verify placement near a synthetic tray-side anchor, complete frame visibility and unchanged queue position after returning.
+
+## Previous 0.1.2 interface improvements
 
 - Compact 620×500 settings with tighter rows, a single Dark/Light theme dropdown and queue geometry restored when returning to Downloads. The save action remains fixed while smaller windows scroll.
 - A simpler tray popup containing quick file actions, New download and Open downloads. Settings and More are removed from the popup; the native tray menu keeps the full controls. A close cross with an Escape tooltip replaces Hide.
@@ -37,7 +45,7 @@ This build replaces the previously shared 0.1.1 development build. No published 
 
 ## Platform and assets
 
-Intended for Windows 10/11 x64. The portable MSVC build uses a static CRT and CPU/GDI rendering, without an application OpenGL/DirectX dependency. Single-architecture asset: `DownloadManager-v0.1.2.exe`, accompanied by `SHA256SUMS.txt`, MIT and dependency notices.
+Intended for Windows 10/11 x64. The portable MSVC build uses a static CRT and CPU/GDI rendering, without an application OpenGL/DirectX dependency. Single-architecture asset: `DownloadManager-v0.1.3.exe`, accompanied by `SHA256SUMS.txt`, MIT and dependency notices.
 
 ## Known limitations and validation
 

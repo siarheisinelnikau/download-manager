@@ -1,0 +1,164 @@
+{
+  "date": "2026-11-01",
+  "code_revision": "9b176c49194f922ef434da9e4826cfae5b6bea56",
+  "executable": "DownloadManager-v0.1.3.exe",
+  "sha256": "2466ce8da6998b30519d7bd5e4376cba221746843a52a9075ba53c6a8bad8b7b",
+  "theme": "Light",
+  "scenario": "populated",
+  "renderer": "egui CPU rasterizer -> softbuffer Win32 GDI BitBlt",
+  "complete": true,
+  "idle_hidden_render_gate": true,
+  "samples": [
+    {
+      "counts": {
+        "layouts": 4,
+        "native_changes": 4,
+        "native_redraws": 4,
+        "presents": 4,
+        "rasters": 4
+      },
+      "cpu_one_core_percent": 0.7812434766169701,
+      "logical_size": [
+        400.0,
+        432.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        478.0,
+        510.0
+      ],
+      "seconds": 2.0000167,
+      "state": "visible_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        400.0,
+        432.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        478.0,
+        510.0
+      ],
+      "seconds": 5.0002953,
+      "state": "visible_idle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        400.0,
+        432.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        478.0,
+        510.0
+      ],
+      "seconds": 3.0002757,
+      "state": "hidden",
+      "visible": false
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 1,
+        "presents": 1,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        400.0,
+        432.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        478.0,
+        510.0
+      ],
+      "seconds": 2.0003979,
+      "state": "restored_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 10,
+        "native_changes": 6,
+        "native_redraws": 10,
+        "presents": 10,
+        "rasters": 10
+      },
+      "cpu_one_core_percent": 1.874871196348811,
+      "logical_size": [
+        400.0,
+        432.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        478.0,
+        510.0
+      ],
+      "seconds": 5.0003435,
+      "state": "restored_native_activity",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        400.0,
+        432.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        478.0,
+        510.0
+      ],
+      "seconds": 5.0003641,
+      "state": "restored_idle",
+      "visible": true
+    }
+  ],
+  "native_events": {
+    "Focused": 2,
+    "Other": 9,
+    "Redraw": 15,
+    "Resized": 4
+  },
+  "limitations": "No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."
+}
