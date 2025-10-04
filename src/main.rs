@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.get(1).is_some_and(|a| a == "--capture-ui") {
         if !matches!(args.len(), 4 | 6) {
             return Err(
-                "Usage: --capture-ui main|settings|popup|new OUTPUT.png [WIDTH HEIGHT] (requires DOWNLOAD_MANAGER_DATA_DIR)"
+                "Usage: --capture-ui main|completed|settings|popup|new OUTPUT.png [WIDTH HEIGHT] (requires DOWNLOAD_MANAGER_DATA_DIR)"
                     .into(),
             );
         }
@@ -63,8 +63,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         let view = args[2].to_str().ok_or("Invalid capture view")?;
-        if !matches!(view, "main" | "settings" | "popup" | "new") {
-            return Err("Capture view must be main, settings, popup or new".into());
+        if !matches!(view, "main" | "completed" | "settings" | "popup" | "new") {
+            return Err("Capture view must be main, completed, settings, popup or new".into());
         }
         let size = if args.len() == 6 {
             let width: u32 = args[4].to_str().ok_or("Invalid width")?.parse()?;

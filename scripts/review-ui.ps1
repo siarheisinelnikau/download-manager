@@ -9,7 +9,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $package = Get-DownloadManagerPackage $repo
 $fixture = Join-Path $repo ('.local/gui-smoke/design/' + $Theme.ToLowerInvariant())
 $suffix = if ($Theme -eq 'Light') { '-light' } else { '' }
-$downloads = Join-Path $fixture 'downloads'
+$downloads = Join-Path $repo '.local/Downloads'
 $screenshots = Join-Path $repo 'docs/screenshots'
 $previousData = $env:DOWNLOAD_MANAGER_DATA_DIR
 Push-Location $repo
@@ -25,10 +25,11 @@ try {
         if ($scenario -eq 'populated') {
             $jobs = @(
                 @{id=1; url='https://example.test/reference-files.zip'; destination=(Join-Path $downloads 'reference-files.zip'); status='Paused'; bytes=40265318; total=268435456; error=$null},
-                @{id=2; url='https://example.test/catalog-assets.zip'; destination=(Join-Path $downloads 'product-photography-and-catalog-assets-2026-10.zip'); status='Failed'; bytes=1310720; total=5242880; error='The remote file changed. Your partial data is preserved. Choose Restart from zero to download the new file.'}
+                @{id=2; url='https://example.test/catalog-assets.zip'; destination=(Join-Path $downloads 'product-photography-and-catalog-assets-2026-10.zip'); status='Failed'; bytes=1310720; total=5242880; error='The remote file changed. Your partial data is preserved. Choose Restart from zero to download the new file.'},
+                @{id=3; url='https://example.test/project-notes.pdf'; destination=(Join-Path $downloads 'project-notes.pdf'); status='Completed'; bytes=4404019; total=4404019; error=$null}
             )
         }
-        $state = @{schema=1; next_id=3; settings=$settings; downloads=$jobs}
+        $state = @{schema=1; next_id=4; settings=$settings; downloads=$jobs}
         [System.IO.File]::WriteAllText((Join-Path $stateFolder 'state.json'), ($state | ConvertTo-Json -Depth 8))
     }
     function Invoke-Review([string]$Mode, [string]$View, [string]$Output, [string]$Scenario, [string[]]$Size=@()) {
@@ -70,12 +71,13 @@ try {
         if (-not $SkipTray) { Invoke-Review '--diagnose-ui' 'tray' (Join-Path $fixture 'runtime-tray.json') 'populated' }
     } else {
         Invoke-Review '--capture-ui' 'main' (Join-Path $screenshots "main-window$suffix.png") 'populated'
+        Invoke-Review '--capture-ui' 'completed' (Join-Path $screenshots "completed$suffix.png") 'populated'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $screenshots "settings$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots "tray-popup$suffix.png") 'populated'
         Invoke-Review '--capture-ui' 'popup' (Join-Path $screenshots "tray-popup-empty$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'popup' (Join-Path $fixture 'popup-minimum.png') 'empty' @('360','220')
         Invoke-Review '--capture-ui' 'new' (Join-Path $screenshots "new-download$suffix.png") 'empty'
-        Invoke-Review '--capture-ui' 'main' (Join-Path $fixture 'empty.png') 'empty'
+        Invoke-Review '--capture-ui' 'main' (Join-Path $screenshots "empty-queue$suffix.png") 'empty'
         Invoke-Review '--capture-ui' 'settings' (Join-Path $fixture 'settings-small.png') 'empty' @('560','440')
     }
     if (-not $Diagnose) {
