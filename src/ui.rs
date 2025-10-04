@@ -106,6 +106,10 @@ impl App {
     pub fn show_queue(&mut self) {
         self.settings_open = false;
     }
+    pub fn show_completed(&mut self) {
+        self.settings_open = false;
+        self.completed = true;
+    }
     pub fn show_new_download(&mut self) {
         let snapshot = self.snapshot();
         self.settings_open = false;
@@ -647,7 +651,15 @@ impl App {
                     ui.separator();
                     setting_row(ui, "Simultaneous downloads", |ui| {
                         egui::ComboBox::from_id_salt("concurrency")
-                            .selected_text(format!("{} files", self.settings.concurrency))
+                            .selected_text(format!(
+                                "{} {}",
+                                self.settings.concurrency,
+                                if self.settings.concurrency == 1 {
+                                    "file"
+                                } else {
+                                    "files"
+                                }
+                            ))
                             .width(110.)
                             .show_ui(ui, |ui| {
                                 for n in 1..=4 {
@@ -661,25 +673,22 @@ impl App {
                     });
                     setting_row(ui, "Download speed", |ui| {
                         let mut limited = self.settings.bandwidth_kib > 0;
-                        ui.horizontal(|ui| {
-                            if limited {
-                                ui.add(
-                                    egui::DragValue::new(&mut self.settings.bandwidth_kib)
-                                        .range(1..=1_048_576)
-                                        .suffix(" KiB/s")
-                                        .speed(64.),
-                                );
-                            } else {
-                                small(ui, "Unlimited");
-                            }
-                            switch(ui, &mut limited, "Limit download speed");
-                        });
-                        if limited != (self.settings.bandwidth_kib > 0) {
+                        if switch(ui, &mut limited, "Limit download speed").changed() {
                             self.settings.bandwidth_kib = if limited { 1024 } else { 0 };
+                        }
+                        if limited {
+                            ui.add(
+                                egui::DragValue::new(&mut self.settings.bandwidth_kib)
+                                    .range(1..=1_048_576)
+                                    .suffix(" KiB/s")
+                                    .speed(64.),
+                            );
+                        } else {
+                            small(ui, "Unlimited");
                         }
                     });
                 });
-                ui.add_space(10.);
+                ui.add_space(6.);
                 settings_group(ui, "Appearance & behavior", |ui| {
                     setting_row(ui, "Theme", |ui| {
                         egui::ComboBox::from_id_salt("theme")
@@ -705,7 +714,7 @@ impl App {
                         );
                     });
                 });
-                ui.add_space(10.);
+                ui.add_space(6.);
                 settings_group(ui, "Updates", |ui| {
                     let busy = matches!(
                         snapshot.update,
@@ -823,16 +832,22 @@ impl App {
             .file_name()
             .unwrap_or_default()
             .to_string_lossy();
-        ui.spacing_mut().item_spacing.y = 7.;
-        ui.spacing_mut().interact_size.y = 26.;
+        ui.spacing_mut().item_spacing.y = 5.;
+        ui.spacing_mut().interact_size.y = 20.;
         egui::Frame::new().inner_margin(16.).show(ui, |ui| {
             ui.allocate_ui_with_layout(
-                egui::vec2(ui.available_width(), 56.),
+                egui::vec2(ui.available_width(), 52.),
                 egui::Layout::left_to_right(egui::Align::Center),
                 |ui| {
                     file_icon(ui, &filename, 44.);
                     ui.add_space(2.);
-                    let action_width = if job_action(job).is_some() { 118. } else { 32. };
+                    let action_width = if job.status == Status::Completed {
+                        160.
+                    } else if job_action(job).is_some() {
+                        118.
+                    } else {
+                        32.
+                    };
                     let width = (ui.available_width() - action_width - 10.).max(160.);
                     ui.allocate_ui_with_layout(
                         egui::vec2(width, 40.),
@@ -863,6 +878,14 @@ impl App {
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         self.job_menu(ui, job);
+                        if job.status == Status::Completed
+                            && ui
+                                .button("Open folder")
+                                .on_hover_text(job.destination.display().to_string())
+                                .clicked()
+                        {
+                            self.open_folder(job);
+                        }
                         if let Some((label, command)) = job_action(job)
                             && ui
                                 .add(
@@ -876,17 +899,18 @@ impl App {
                     });
                 },
             );
-            ui.add_space(3.);
-            progress(
-                ui,
-                fraction(job),
-                match job.status {
-                    Status::Completed => colors.success,
-                    Status::Failed => colors.error,
-                    Status::Downloading => colors.accent,
-                    _ => colors.muted,
-                },
-            );
+            if job.status != Status::Completed {
+                progress(
+                    ui,
+                    fraction(job),
+                    match job.status {
+                        Status::Completed => colors.success,
+                        Status::Failed => colors.error,
+                        Status::Downloading => colors.accent,
+                        _ => colors.muted,
+                    },
+                );
+            }
             ui.horizontal(|ui| {
                 small(
                     ui,
@@ -925,7 +949,7 @@ impl App {
                             title(format!("{}/s", bytes(job.speed.max(0.) as u64)), 12.)
                                 .color(colors.accent),
                         );
-                    } else if job.total.is_some() {
+                    } else if job.status != Status::Completed && job.total.is_some() {
                         small(ui, &format!("{:.0}%", fraction(job) * 100.));
                     }
                 });
@@ -936,6 +960,7 @@ impl App {
                     .inner_margin(egui::Margin::symmetric(10, 8))
                     .corner_radius(6.)
                     .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
                         ui.horizontal(|ui| {
                             let (rect, _) =
                                 ui.allocate_exact_size(Vec2::splat(18.), egui::Sense::hover());
@@ -969,7 +994,7 @@ impl App {
         let button = egui::Button::new("•••")
             .frame(false)
             .min_size(egui::vec2(32., 32.));
-        egui::containers::menu::MenuButton::from_button(button)
+        let response = egui::containers::menu::MenuButton::from_button(button)
             .ui(ui, |ui| {
                 ui.set_max_width(420.);
                 field_label(ui, "Save location");
@@ -1000,8 +1025,35 @@ impl App {
                     ui.close();
                 }
             })
-            .0
-            .on_hover_text("More download actions");
+            .0;
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                ui.is_enabled(),
+                "More download actions",
+            )
+        });
+        response.on_hover_text("More download actions");
+    }
+
+    fn open_folder(&mut self, job: &Download) {
+        #[cfg(windows)]
+        if let Some(folder) = job.destination.parent()
+            && let Err(error) = std::process::Command::new("explorer.exe")
+                .arg(folder)
+                .spawn()
+        {
+            self.local_error = Some(format!(
+                "Couldn't open the save folder. {}: {error}",
+                folder.display()
+            ));
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = job;
+            self.local_error =
+                Some("Opening a save folder is currently supported on Windows only.".into());
+        }
     }
 
     pub fn update(&mut self, ctx: &egui::Context) {
@@ -1053,7 +1105,7 @@ impl App {
                         }
                     });
                 });
-                ui.add_space(22.);
+                ui.add_space(10.);
                 ui.label(title("Downloads", 28.));
                 let completed = snapshot
                     .state
@@ -1070,7 +1122,9 @@ impl App {
                 let pending = snapshot.state.downloads.len() - completed;
                 secondary(
                     ui,
-                    if active > 0 {
+                    if self.completed {
+                        "Open a save folder or manage your history."
+                    } else if active > 0 {
                         "Your downloads are on their way."
                     } else if pending > 0 {
                         "Pick up where you left off."
@@ -1078,7 +1132,7 @@ impl App {
                         "Your files, in one place."
                     },
                 );
-                ui.add_space(14.);
+                ui.add_space(4.);
                 if let Some(error) = self.startup_error.as_ref().or(snapshot.fatal.as_ref()) {
                     notice(
                         ui,
@@ -1149,7 +1203,7 @@ impl App {
                         });
                     });
                     ui.separator();
-                    ui.add_space(12.);
+                    ui.add_space(4.);
                     let jobs: Vec<_> = snapshot
                         .state
                         .downloads
@@ -1246,7 +1300,10 @@ impl App {
                 small(
                     &mut footer,
                     &if failures > 0 {
-                        format!("{pending} in queue · {failures} needs attention")
+                        format!(
+                            "{pending} in queue · {failures} {} attention",
+                            if failures == 1 { "needs" } else { "need" }
+                        )
                     } else if pending > 0 {
                         format!("{pending} in queue · {active} downloading")
                     } else {
@@ -1266,10 +1323,21 @@ impl App {
             });
         self.add_dialog(ctx, &snapshot);
         if let Some(id) = self.restart {
-            let modal=egui::Modal::new(egui::Id::new("restart_download")).frame(egui::Frame::new().fill(colors.surface).inner_margin(24.).corner_radius(12.).stroke(Stroke::new(1.,colors.border))).show(ctx,|ui| {
-                ui.set_max_width(420.);ui.label(title("Restart this download?",22.));ui.label("This discards the partial file and downloads it again. Existing completed files are kept.");ui.add_space(12.);
-                ui.horizontal(|ui|{if ui.button("Keep partial file").clicked(){self.restart=None;}if ui.add(primary(ui,"Restart download")).clicked(){self.send(Command::Restart(id));self.restart=None;}});
-            });
+            let modal = egui::Modal::new(egui::Id::new("restart_download"))
+                .frame(egui::Frame::new().fill(colors.surface).inner_margin(24.).corner_radius(12.).stroke(Stroke::new(1., colors.border)))
+                .show(ctx, |ui| {
+                    ui.set_max_width(420.);
+                    ui.label(title("Restart this download?", 22.));
+                    ui.label("This discards the partial file and downloads it again. Existing completed files are kept.");
+                    ui.add_space(12.);
+                    ui.horizontal(|ui| {
+                        if ui.button("Keep partial file").clicked() { self.restart = None; }
+                        if ui.add(primary(ui, "Restart download")).clicked() {
+                            self.send(Command::Restart(id));
+                            self.restart = None;
+                        }
+                    });
+                });
             if modal.should_close() {
                 self.restart = None;
             }
@@ -1331,7 +1399,7 @@ fn settings_group(ui: &mut egui::Ui, label: &str, contents: impl FnOnce(&mut egu
         .fill(palette(ui.ctx()).surface)
         .stroke(Stroke::new(1., palette(ui.ctx()).border))
         .corner_radius(8.)
-        .inner_margin(egui::Margin::symmetric(12, 8))
+        .inner_margin(egui::Margin::symmetric(12, 6))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             contents(ui);

@@ -58,6 +58,7 @@ struct FrameTiming {
 }
 
 struct Capture {
+    completed: bool,
     popup_layout: Option<serde_json::Value>,
     new_download: bool,
     path: PathBuf,
@@ -72,6 +73,7 @@ struct Capture {
 impl Capture {
     fn new(path: PathBuf, view: &str) -> Self {
         Self {
+            completed: view == "completed",
             popup_layout: None,
             new_download: view == "new",
             path,
@@ -752,7 +754,7 @@ impl CpuHost {
         let open_capture = self
             .capture
             .as_ref()
-            .is_some_and(|c| c.settings && !c.opened);
+            .is_some_and(|c| (c.settings || c.completed) && !c.opened);
         let open_diagnostic = self
             .diagnostic
             .as_ref()
@@ -766,7 +768,11 @@ impl CpuHost {
             .as_ref()
             .is_some_and(|d| d.new_download && !d.opened);
         if (open_capture || open_diagnostic) && self.app.as_ref().unwrap().ready() {
-            self.app.as_mut().unwrap().open_settings();
+            if self.capture.as_ref().is_some_and(|c| c.completed) {
+                self.app.as_mut().unwrap().show_completed();
+            } else {
+                self.app.as_mut().unwrap().open_settings();
+            }
             if let Some(c) = &mut self.capture {
                 c.opened = true;
             }
@@ -788,7 +794,7 @@ impl CpuHost {
             && self
                 .capture
                 .as_ref()
-                .is_none_or(|c| !(c.settings || c.new_download) || c.opened)
+                .is_none_or(|c| !(c.settings || c.new_download || c.completed) || c.opened)
             && (!self.popup
                 || (self.popup_review_sized
                     && size
