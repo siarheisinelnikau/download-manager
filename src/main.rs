@@ -28,27 +28,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     if args.get(1).is_some_and(|a| a == "--apply-update") {
-        if args.len() != 6 {
-            return Err("Invalid updater arguments".into());
-        }
-        let result = download_manager::updater::apply_update(
-            std::path::Path::new(&args[2]),
-            std::path::Path::new(&args[3]),
-            args[4].to_str().ok_or("Invalid update checksum")?,
-            args[5].to_str().ok_or("Invalid parent PID")?.parse()?,
-        );
-        if let Err(error) = result {
-            // Helpers have no interactive UI. Keep a durable, user-readable failure report.
-            let log = std::path::Path::new(&args[3]).with_file_name("last-update-error.txt");
-            let _ = std::fs::write(
-                log,
-                format!(
-                    "Update installation failed: {error:#}\nThe previous executable or its .update-backup.exe copy is preserved.\n"
-                ),
-            );
-            return Err(error.into());
-        }
+        let result = match args.len() {
+            2 => download_manager::updater::apply_update(),
+            6 => download_manager::updater::apply_legacy(
+                std::path::Path::new(&args[2]),
+                std::path::Path::new(&args[3]),
+                args[4].to_str().ok_or("Invalid update checksum")?,
+                args[5].to_str().ok_or("Invalid parent PID")?.parse()?,
+            ),
+            _ => return Err("Unexpected updater arguments".into()),
+        };
+        result.inspect_err(download_manager::updater::report_helper_failure)?;
         return Ok(());
+    }
+    if args.get(1).is_some_and(|a| a == "--cleanup-update") {
+        if args.len() != 3 {
+            return Err("Expected update cleanup directory".into());
+        }
+        return window::run();
     }
     if args.get(1).is_some_and(|a| a == "--capture-ui") {
         if !matches!(args.len(), 4 | 6) {

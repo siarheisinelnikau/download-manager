@@ -50,9 +50,11 @@ Canonical future repository: [siarheisinelnikau/download-manager](https://github
 
 Installation supports the single Windows x64 asset `DownloadManager-vVERSION.exe`. It requires the GitHub SHA-256 asset digest or a matching `SHA256SUMS.txt` entry. The helper waits for the application to exit, creates a backup beside the installed EXE, replaces it and relaunches it. Settings, queue and download data remain in their existing locations. The installed EXE keeps its current filename after an in-place update. No administrator prompt or unattended install is used. Read-only installation folders produce an error and require moving the portable app to a writable folder.
 
-Helper failures are recorded in `%LOCALAPPDATA%\DownloadManager\updates\last-update-error.txt` and shown on the next launch. If necessary, recover the previous executable from the adjacent `.update-backup.exe` file. The updater has been compiled and its parsing/checksum rules tested; real release download, replacement, rollback and restart still require manual validation.
+The shared `rust-auto-updator` core owns release checks, verified downloads and atomic replacement/rollback. New helpers stage beside the EXE under `.DownloadManager-update-*`, retain `previous.exe` during replacement, and clean known staging files only after updated host initialization. The application saves and stops its queue before handoff. It still accepts the helper protocol used by earlier versions and reads their retained error reports. Real release download, replacement, rollback and restart still require manual validation.
 
 ## Build and checks
+
+Source builds require the sibling `../rust-auto-updator/crates/rust-auto-updator` workspace. The reusable core is currently a local dependency; standalone CI must provision both checkouts before building. No registry/GitHub publication is implied.
 
 Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visual Studio C++ build tools and Windows SDK. The GUI uses egui 0.33.3 with CPU rasterization and Win32 GDI presentation; the executable has no OpenGL/DirectX rendering dependency. Windows 10/11 x64 is the intended target, with broader interactive compatibility still pending. Other OS/architecture builds are not release targets for v0.1.3.
 

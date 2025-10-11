@@ -18,6 +18,10 @@ try {
         $lines.Add("Source: $($package.repository)")
         $root = Split-Path -Parent $package.manifest_path
         $licenses = Get-ChildItem -LiteralPath $root -File -Recurse | Where-Object { $_.Name -match '^(LICENSE|LICENCE|COPYING|NOTICE|UNLICENSE|OFL|UFL)([._-]|$)|license.*\.(txt|md)$' }
+        if ($package.name -eq 'rust-auto-updator' -and -not $package.source) {
+            $workspaceLicense = Join-Path (Split-Path -Parent (Split-Path -Parent $root)) 'LICENSE'
+            if (Test-Path -LiteralPath $workspaceLicense -PathType Leaf) { $licenses = @($licenses) + (Get-Item -LiteralPath $workspaceLicense) }
+        }
         if ($package.license_file) {
             $licensePath = Join-Path $root $package.license_file
             if (Test-Path -LiteralPath $licensePath -PathType Leaf) { $licenses = @($licenses) + (Get-Item -LiteralPath $licensePath) }

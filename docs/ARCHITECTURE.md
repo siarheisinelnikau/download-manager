@@ -20,7 +20,7 @@ Close hides by default, controlled by persisted `close_to_tray`. Quit sends a st
 
 A per-data-directory Windows named mutex selects one UI instance. A second launch grants foreground permission to its recorded PID and signals a named activation event. One blocking wait thread forwards activation through the same UI dispatcher; it is signaled and joined during shutdown. No localhost server or activation polling is used. The coordinator's file lock remains the persistence boundary. The tray diagnostic exercises the real window/controller, a separate activation process and hidden Quit; Shell registration/cleanup are checked separately, and an unavailable tray produces an explicit diagnostic failure.
 
-One code-native icon produces the RGBA window/tray texture and the multiresolution ICO embedded by the Windows resource compiler. Packaging asks Windows to decode all six sizes from the final EXE as data, without executing it.
+The native tray bitmap is rasterized at the Win32 small-icon metric, with no fixed 32px downscale. One code-native icon produces the RGBA window/tray texture and the multiresolution ICO embedded by the Windows resource compiler. Packaging asks Windows to decode all seven sizes from the final EXE as data, without executing it.
 
 OS termination/power loss is handled by durable checkpoints rather than a promise of orderly cleanup.
 
@@ -62,7 +62,9 @@ The shared bandwidth limiter reserves delivery time across all active workers an
 
 The installed app uses public HTTPS GitHub APIs, independent of any Codex plugin. Stable releases are parsed with semver; drafts/prereleases and incompatible assets are rejected. Download URLs must belong to the canonical repository's release path. HTTPS-only redirects, a 256 MiB asset limit, published byte count, SHA-256 and x64 PE-header checks protect staging. The digest is supplied over the same trusted GitHub channel; this is not independent code signing.
 
-Only a user action launches installation. A verified copy of the new executable runs in helper mode, waits for the parent process, copies the payload to a sibling staging file, verifies it again, backs up the existing EXE and replaces it atomically. Replacement/relaunch failures are logged for the next launch. The app data directory is not migrated or removed. A real end-to-end updater run, Authenticode signing and an externally published release are outside the verified scope of this session.
+Only a user action launches installation. The sibling `rust-auto-updator` core owns release parsing, HTTPS download, checksum/digest agreement, complete PE/architecture verification, staging, Windows atomic replacement/rollback and cleanup. The product adapter supplies repository/version, the 256 MiB limit and staging names. Snapshot clones share one prepared payload; no duplicate updater implementation remains in this repository. Queue persistence and worker shutdown finish before a successful handoff permits exit. The new helper CLI is dispatched before instance/UI side effects; cleanup waits for successful native host initialization.
+
+For migration, older DownloadManager versions pass target/staged/hash/PID to the newly downloaded helper. The adapter validates its product-specific data-directory and helper filename; the shared core verifies the actual helper and payload and imports this request into the modern installer. It never treats old flags as an ordinary GUI launch. The app data directory is not migrated or removed. A real end-to-end updater run, Authenticode signing and an externally published release are outside this session's verified scope.
 
 ## Source references
 

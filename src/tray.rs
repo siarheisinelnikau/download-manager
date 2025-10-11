@@ -79,12 +79,23 @@ impl Tray {
             &PredefinedMenuItem::separator(),
             &quit,
         ])?;
+        // Rasterize at the shell's small-icon metric; do not shrink a fixed 32px bitmap.
+        let side = unsafe {
+            windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(
+                windows_sys::Win32::UI::WindowsAndMessaging::SM_CXSMICON,
+            )
+        }
+        .clamp(16, 256) as u32;
         let icon = TrayIconBuilder::new()
             .with_id("download-manager")
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
             .with_tooltip("DownloadManager · Click to view downloads")
-            .with_icon(tray_icon::Icon::from_rgba(crate::icons::rgba(32), 32, 32)?)
+            .with_icon(tray_icon::Icon::from_rgba(
+                crate::icons::rgba(side),
+                side,
+                side,
+            )?)
             .build()?;
         let active = alive.clone();
         let callback = send.clone();
