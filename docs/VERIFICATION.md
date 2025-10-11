@@ -1,8 +1,22 @@
 # Verification record
 
-Date: 2026-11-01 (Europe/Minsk). Current local build: **0.1.3**. Footer and tray-side placement fixes are in `a52598f` and `9b176c4`. Folder browsing was implemented in `3ff9957`; compact settings and popup changes are in `081ae31`. Work, fixtures and output stayed inside this repository. Nothing was published. Computer Use was not used.
+Date: 2026-11-01 (Europe/Minsk). Previous local build: **0.1.3**. Footer and tray-side placement fixes are in `a52598f` and `9b176c4`. Folder browsing was implemented in `3ff9957`; compact settings and popup changes are in `081ae31`. Work, fixtures and output stayed inside this repository. Nothing was published. Computer Use was not used.
 
-## Current artifact and checks
+## Rust workspace audit (2026-11-01)
+
+Release validation, HTTPS download, digest/checksum agreement, complete PE/architecture/subsystem checks and atomic replacement/rollback now live in the sibling `rust-auto-updator` crate. The local adapter preserves product identity, explicit install intent, the existing sleeping queue coordinator and progress UI. Queue persistence and active-worker shutdown still precede handoff. The new helper protocol is handled before the UI/instance lock; the old positional helper protocol imports into the core after product staging checks. Recognized helper failures still produce the durable next-startup report. No update is installed during checks.
+
+The EXE icon now includes 20px alongside 16/24/32/48/64/256px. The tray mark is rasterized at the Win32 small-icon metric; the host explicitly sets both generic window/ICON_SMALL and taskbar/ICON_BIG icons. `python scripts/verify-icons.py EXE OUTPUT.png` renders resources from the final executable offscreen without launching it; it is an icon-resource proof, not an OS tray screenshot.
+
+The source and pinned dependency review confirms CPU rasterization and the softbuffer Win32 CreateDIBSection/BitBlt path. The existing event-driven loop retains unchanged pixels, suspends layout/raster/present while hidden, and updates tray tooltip/menu only on displayed-state changes. No GPU renderer or recurring idle frame was introduced. Source builds and standalone CI now require the sibling updater checkout; no registry/GitHub publication or guessed remote checkout is included.
+
+Final audit checks: the library Clippy check with warnings denied passed, all 26 current-checkout tests passed, and the optimized static-CRT Windows x64 build passed. All-target Clippy is blocked by a concurrently edited UI macro (`possible_missing_else` in `src/ui.rs`), outside these changes. The actual optimized EXE passed the seven-size offscreen resource proof and its PNG was inspected on light/dark backgrounds. Its SHA-256 was `eb1ebbb4ad97bd6b7bc5adcc538c5b47642c398da2d67031c943197ea23a9dff`.
+
+A bounded isolated `--diagnose-ui main` run (PID 47436) exited successfully and reported the CPU/GDI backend. Visible idle (5.000s), hidden (3.000s) and restored idle (5.001s) each recorded **0 layouts, 0 rasterizations, 0 presentations and 0.0% of one CPU core**. Restore used one cached exposure blit without reconstructing/rasterizing the scene. The fixture had no active downloads, startup update checks were disabled, no tray was created and lifecycle transitions came from the application itself. This establishes static idle/hidden behavior for the concurrently edited 0.1.4 working tree; it does not certify real tray clicks, taskbar/Alt-Tab appearance, active transfers, perceived input lag or GPU/compositor waits.
+
+A separate chat concurrently changed the UI, version and screenshots during this audit. Those edits are preserved and excluded from this task's commits; checks of the live working tree include that concurrent UI. Real mouse/tray-menu interaction and perceived responsiveness remain outside noninteractive verification. No Computer Use, desktop capture or real user download was used.
+
+## Prior artifact and checks
 
 `dist/DownloadManager-v0.1.3.exe`, 8,096,768 bytes. SHA-256: `2466ce8da6998b30519d7bd5e4376cba221746843a52a9075ba53c6a8bad8b7b`.
 

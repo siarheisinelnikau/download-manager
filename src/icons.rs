@@ -42,7 +42,7 @@ pub fn rgba(size: u32) -> Vec<u8> {
 
 #[allow(dead_code)] // Used by build.rs as well as the explicit icon-export command.
 pub fn ico() -> Vec<u8> {
-    let sizes = [16u32, 24, 32, 48, 64, 256];
+    let sizes = [16u32, 20, 24, 32, 48, 64, 256];
     let mut out = Vec::new();
     out.extend_from_slice(&[0, 0, 1, 0]);
     out.extend_from_slice(&(sizes.len() as u16).to_le_bytes());
@@ -105,7 +105,7 @@ mod tests {
             System::LibraryLoader::GetModuleHandleW,
             UI::WindowsAndMessaging::{DestroyIcon, IMAGE_ICON, LoadImageW},
         };
-        for size in [16, 24, 32, 48, 64, 256] {
+        for size in [16, 20, 24, 32, 48, 64, 256] {
             let icon = unsafe {
                 LoadImageW(
                     GetModuleHandleW(std::ptr::null()),
@@ -127,7 +127,7 @@ mod tests {
     }
     #[test]
     fn icon_is_legible_and_ico_contains_all_sizes() {
-        for size in [16, 24, 32, 48, 64, 256] {
+        for size in [16, 20, 24, 32, 48, 64, 256] {
             let pixels = rgba(size);
             assert_eq!(pixels.len(), (size * size * 4) as usize);
             assert!(pixels.chunks_exact(4).any(|p| p == [255, 255, 255, 255]));
@@ -135,8 +135,8 @@ mod tests {
             assert_eq!(pixels[3], 0);
         }
         let bytes = ico();
-        assert_eq!(&bytes[..6], &[0, 0, 1, 0, 6, 0]);
-        for index in 0..6 {
+        assert_eq!(&bytes[..6], &[0, 0, 1, 0, 7, 0]);
+        for index in 0..7 {
             let entry = 6 + index * 16;
             let len = u32::from_le_bytes(bytes[entry + 8..entry + 12].try_into().unwrap()) as usize;
             let offset =

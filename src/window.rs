@@ -953,17 +953,14 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             return;
         }
         let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+            let icon = winit::window::Icon::from_rgba(crate::icons::rgba(64), 64, 64)?;
             let window = Arc::new(
                 event_loop.create_window(
                     Window::default_attributes()
                         .with_active(self.diagnostic.is_none())
                         .with_title("DownloadManager")
                         .with_theme(Some(winit::window::Theme::Dark))
-                        .with_window_icon(Some(winit::window::Icon::from_rgba(
-                            crate::icons::rgba(64),
-                            64,
-                            64,
-                        )?))
+                        .with_window_icon(Some(icon.clone()))
                         .with_decorations(!self.popup)
                         .with_resizable(!self.popup)
                         .with_inner_size(LogicalSize::new(self.size.0, self.size.1))
@@ -976,6 +973,11 @@ impl ApplicationHandler<UserEvent> for CpuHost {
                         }),
                 )?,
             );
+            #[cfg(windows)]
+            {
+                use winit::platform::windows::WindowExtWindows;
+                window.set_taskbar_icon(Some(icon));
+            }
             if self.diagnostic.is_some() {
                 window.set_cursor_hittest(false)?;
             }
@@ -1006,6 +1008,9 @@ impl ApplicationHandler<UserEvent> for CpuHost {
             }
             window.request_redraw();
             self.window = Some(window);
+            if self.capture.is_none() && self.diagnostic.is_none() {
+                download_manager::updater::cleanup_pending();
+            }
             if let Some(d) = &mut self.diagnostic {
                 d.window_id = self.window.as_ref().map(|w| w.id());
                 d.start(self.counters);
