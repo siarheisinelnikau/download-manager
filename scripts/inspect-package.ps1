@@ -71,7 +71,7 @@ public static class DownloadManagerPackageIcons {
 # Read resources as data: this never executes the packaged application.
 $module = [DownloadManagerPackageIcons]::LoadLibraryExW([IO.Path]::GetFullPath($Path), [IntPtr]::Zero, 0x22)
 if ($module -eq [IntPtr]::Zero) { throw 'Windows could not load the packaged icon resources' }
-$iconSizes = @(16,24,32,48,64,256)
+$iconSizes = @(16,20,24,32,48,64,256)
 try {
     foreach ($size in $iconSizes) {
         $icon = [DownloadManagerPackageIcons]::LoadImageW($module, [IntPtr]1, 1, $size, $size, 0)

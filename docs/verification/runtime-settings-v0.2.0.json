@@ -1,0 +1,144 @@
+{
+  "complete": true,
+  "executable": "E:\\work\\github\\download-manager\\dist\\DownloadManager-v0.2.0.exe",
+  "idle_hidden_render_gate": true,
+  "limitations": "No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation.",
+  "native_events": {
+    "Redraw": 3,
+    "Resized": 3
+  },
+  "navigation": false,
+  "new_download": false,
+  "pid": 32168,
+  "popup": false,
+  "renderer": "egui CPU rasterizer -> softbuffer Win32 GDI BitBlt",
+  "repaint_causes": {},
+  "samples": [
+    {
+      "counts": {
+        "layouts": 2,
+        "native_changes": 3,
+        "native_redraws": 2,
+        "presents": 2,
+        "rasters": 2
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        620.0,
+        500.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        52.0,
+        52.0,
+        688.0,
+        591.0
+      ],
+      "seconds": 2.0000238,
+      "state": "visible_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        620.0,
+        500.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        52.0,
+        52.0,
+        688.0,
+        591.0
+      ],
+      "seconds": 5.0003056,
+      "state": "visible_idle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        620.0,
+        500.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        52.0,
+        52.0,
+        688.0,
+        591.0
+      ],
+      "seconds": 3.0004098,
+      "state": "hidden",
+      "visible": false
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 1,
+        "presents": 1,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        620.0,
+        500.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        52.0,
+        52.0,
+        688.0,
+        591.0
+      ],
+      "seconds": 2.0000507,
+      "state": "restored_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        620.0,
+        500.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        52.0,
+        52.0,
+        688.0,
+        591.0
+      ],
+      "seconds": 5.000166,
+      "state": "restored_idle",
+      "visible": true
+    }
+  ],
+  "settings_page": true,
+  "tray_lifecycle": false,
+  "version": "0.2.0",
+  "code_revision": "be1407012a02dd791e88e3f9a1eb5ee30aec7382",
+  "sha256": "86ef5b52a6c107373139d343cd22d41f37049fffb35e07eb87b19fa2a9b843b6",
+  "fixture": "Synthetic queue/history; startup checks disabled; no network transfers"
+}

@@ -3,39 +3,39 @@
   "frame_count": 3,
   "frames": [
     {
-      "present_ms": 0.17650000000000002,
-      "raster_ms": 1.5339,
-      "total_ms": 2.6513999999999998,
-      "ui_ms": 0.941
+      "present_ms": 0.1898,
+      "raster_ms": 1.7476,
+      "total_ms": 3.5141999999999998,
+      "ui_ms": 1.5768
     },
     {
-      "present_ms": 0.2329,
-      "raster_ms": 0.4247,
-      "total_ms": 1.0153,
-      "ui_ms": 0.3577
+      "present_ms": 0.09849999999999999,
+      "raster_ms": 0.9874,
+      "total_ms": 2.0129,
+      "ui_ms": 0.9269999999999999
     },
     {
-      "present_ms": 0.0731,
-      "raster_ms": 0.1285,
-      "total_ms": 0.2636,
-      "ui_ms": 0.062
+      "present_ms": 0.06609999999999999,
+      "raster_ms": 0.1486,
+      "total_ms": 0.2736,
+      "ui_ms": 0.0589
     }
   ],
-  "median_total_ms": 1.0153,
-  "p95_total_ms": 1.0153,
+  "median_total_ms": 2.0129,
+  "p95_total_ms": 2.0129,
   "popup_layout": {
     "bottom_inset": 17.0,
     "content": [
       17.0,
       17.0,
       383.0,
-      415.0
+      355.0
     ],
     "footer": [
       17.0,
-      379.0,
+      320.0,
       383.0,
-      415.0
+      355.0
     ],
     "footer_inside_content": true
   },

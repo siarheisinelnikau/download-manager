@@ -1,0 +1,135 @@
+{
+  "artifact": "E:\\work\\github\\download-manager\\dist\\DownloadManager-v0.2.0.exe",
+  "proof": "Win32 LoadImageW + DrawIconEx, offscreen; application not launched",
+  "icon_sizes": [
+    16,
+    20,
+    24,
+    32,
+    48,
+    64,
+    256
+  ],
+  "results": [
+    {
+      "size": 16,
+      "light_dark_artwork_bounds": [
+        [
+          0,
+          0,
+          16,
+          16
+        ],
+        [
+          0,
+          0,
+          16,
+          16
+        ]
+      ]
+    },
+    {
+      "size": 20,
+      "light_dark_artwork_bounds": [
+        [
+          0,
+          0,
+          20,
+          20
+        ],
+        [
+          0,
+          0,
+          20,
+          20
+        ]
+      ]
+    },
+    {
+      "size": 24,
+      "light_dark_artwork_bounds": [
+        [
+          1,
+          1,
+          23,
+          23
+        ],
+        [
+          1,
+          1,
+          23,
+          23
+        ]
+      ]
+    },
+    {
+      "size": 32,
+      "light_dark_artwork_bounds": [
+        [
+          1,
+          1,
+          31,
+          31
+        ],
+        [
+          1,
+          1,
+          31,
+          31
+        ]
+      ]
+    },
+    {
+      "size": 48,
+      "light_dark_artwork_bounds": [
+        [
+          2,
+          2,
+          46,
+          46
+        ],
+        [
+          2,
+          2,
+          46,
+          46
+        ]
+      ]
+    },
+    {
+      "size": 64,
+      "light_dark_artwork_bounds": [
+        [
+          2,
+          2,
+          62,
+          62
+        ],
+        [
+          2,
+          2,
+          62,
+          62
+        ]
+      ]
+    },
+    {
+      "size": 256,
+      "light_dark_artwork_bounds": [
+        [
+          10,
+          10,
+          246,
+          246
+        ],
+        [
+          10,
+          10,
+          246,
+          246
+        ]
+      ]
+    }
+  ],
+  "os_tray_interaction_verified": false
+}
