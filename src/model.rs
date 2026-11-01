@@ -50,6 +50,7 @@ pub enum Theme {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    pub language: crate::i18n::Language,
     pub concurrency: usize,
     pub bandwidth_kib: u64,
     pub startup_update_check: bool,
@@ -62,6 +63,7 @@ impl Default for Settings {
     fn default() -> Self {
         let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME"));
         Self {
+            language: crate::i18n::Language::English,
             concurrency: 2,
             bandwidth_kib: 0,
             startup_update_check: true,

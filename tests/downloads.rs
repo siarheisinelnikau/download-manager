@@ -21,7 +21,12 @@ fn accept(listener: &TcpListener) -> TcpStream {
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => {
+                // Windows may inherit the listener's nonblocking mode on accepted sockets.
+                // The fixture reads synchronously with a timeout after this bounded accept.
+                stream.set_nonblocking(false).unwrap();
+                return stream;
+            }
             Err(e)
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     && std::time::Instant::now() < deadline =>

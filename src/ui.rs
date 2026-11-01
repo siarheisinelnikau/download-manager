@@ -3,6 +3,7 @@ use crate::folder_picker::{Request as FolderRequest, Target as FolderTarget};
 use crate::theme::{self, palette, title};
 use components::{Glyph, badge, file_icon, glyph, icon_button, progress, switch, tab};
 use download_manager::{
+    i18n::Language,
     manager::{Command, Manager, Snapshot},
     model::{
         Download, Settings, Status, Theme, VERSION, suggested_filename, validate_filename,
@@ -18,6 +19,7 @@ pub struct App {
     popup_bounds: Option<(egui::Rect, egui::Rect)>,
     icon: egui::TextureHandle,
     applied_theme: Theme,
+    applied_language: Language,
     manager: Option<Manager>,
     startup_error: Option<String>,
     local_error: Option<String>,
@@ -57,6 +59,7 @@ impl App {
             popup_bounds: None,
             icon,
             applied_theme: Theme::Dark,
+            applied_language: Language::English,
             manager,
             startup_error,
             local_error: None,
@@ -119,8 +122,10 @@ impl App {
         self.send(command);
     }
     pub fn tray_unavailable(&mut self, error: &str) {
-        self.local_error = Some(format!(
-            "System tray unavailable. Closing the window will exit. {error}"
+        let language = self.applied_language;
+        self.local_error = Some(language.format(
+            "System tray unavailable. Closing the window will exit. {error}",
+            &[("error", error.to_owned())],
         ));
     }
 
@@ -143,6 +148,7 @@ impl App {
         self.popup_bounds = None;
         let snapshot = self.snapshot();
         self.sync_theme(ctx, &snapshot);
+        let language = self.applied_language;
         let colors = palette(ctx);
         let mut action = None;
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
@@ -159,12 +165,14 @@ impl App {
                 let bounds = ui.max_rect();
                 ui.horizontal(|ui| {
                     ui.add(egui::Image::new(&self.icon).fit_to_exact_size(Vec2::splat(24.)));
-                    ui.label(title("Downloads", 18.));
+                    ui.label(title(language.text("Downloads"), 18.));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if icon_button(ui, Glyph::Close, "Close popup · Esc").clicked() {
+                        if icon_button(ui, Glyph::Close, language.text("Close popup · Esc"))
+                            .clicked()
+                        {
                             action = Some(crate::tray::Command::Popup { x: 0., y: 0. });
                         }
-                        if icon_button(ui, Glyph::Plus, "New download").clicked() {
+                        if icon_button(ui, Glyph::Plus, language.text("New download")).clicked() {
                             action = Some(crate::tray::Command::NewDownload);
                         }
                     });
@@ -188,11 +196,17 @@ impl App {
                     .filter(|d| d.status == Status::Downloading)
                     .count();
                 let status = if jobs.is_empty() {
-                    "Ready when you are".into()
+                    language.text("Ready when you are").into()
                 } else if active > 0 {
-                    format!("{active} downloading · {} in queue", jobs.len())
+                    language.format(
+                        "{active} downloading · {count} in queue",
+                        &[
+                            ("active", active.to_string()),
+                            ("count", jobs.len().to_string()),
+                        ],
+                    )
                 } else {
-                    format!("{} in queue", jobs.len())
+                    language.format("{count} in queue", &[("count", jobs.len().to_string())])
                 };
                 small(ui, &status);
                 ui.add_space(4.);
@@ -221,8 +235,8 @@ impl App {
                             ui.horizontal(|ui| {
                                 file_icon(ui, "download", 40.);
                                 ui.vertical(|ui| {
-                                    ui.label(title("Nothing in the queue", 15.));
-                                    small(ui, "Use + to add your next download.");
+                                    ui.label(title(language.text("Nothing in the queue"), 15.));
+                                    small(ui, language.text("Use + to add your next download."));
                                 });
                             });
                         }
@@ -244,7 +258,8 @@ impl App {
                                                 .truncate(),
                                         )
                                         .on_hover_text(job.destination.display().to_string());
-                                        let (label, color) = status_label(job.status, colors);
+                                        let (label, color) =
+                                            status_label(job.status, colors, language);
                                         ui.label(
                                             RichText::new(if job.status == Status::Downloading {
                                                 format!("{}/s", bytes(job.speed.max(0.) as u64))
@@ -256,7 +271,7 @@ impl App {
                                         );
                                     },
                                 );
-                                if let Some((label, command)) = job_action(job)
+                                if let Some((label, command)) = job_action(job, language)
                                     && ui
                                         .add(
                                             egui::Button::new(title(label, 12.))
@@ -283,7 +298,7 @@ impl App {
                                     bytes(job.bytes),
                                     job.total
                                         .map(bytes)
-                                        .unwrap_or_else(|| "Unknown size".into())
+                                        .unwrap_or_else(|| language.text("Unknown size").into())
                                 ),
                             );
                             if index + 1 < jobs.len().min(4) {
@@ -294,7 +309,7 @@ impl App {
                     });
                 let footer = ui.put(
                     footer_rect,
-                    egui::Button::new(title("Open downloads", 14.))
+                    egui::Button::new(title(language.text("Open downloads"), 14.))
                         .fill(colors.hover)
                         .stroke(Stroke::new(1., colors.border))
                         .corner_radius(7.),
@@ -333,6 +348,7 @@ impl App {
             generation: self.folder_generation,
             target,
             initial: PathBuf::from(initial),
+            language: self.applied_language,
         });
     }
 
@@ -346,6 +362,7 @@ impl App {
         target: FolderTarget,
         result: Result<Option<PathBuf>, String>,
     ) {
+        let language = self.applied_language;
         if self.folder_pending != Some((generation, target)) {
             return;
         }
@@ -362,7 +379,7 @@ impl App {
             chosen
                 .map(|path| {
                     path.into_os_string().into_string().map_err(|_| {
-                        "Choose another folder: this folder name cannot be represented as text."
+                        language.text("Choose another folder: this folder name cannot be represented as text.")
                             .to_owned()
                     })
                 })
@@ -381,8 +398,10 @@ impl App {
             },
             Ok(None) => {}
             Err(error) => {
-                let message =
-                    format!("Couldn't choose a folder. You can enter its path manually. {error}");
+                let message = language.format(
+                    "Couldn't choose a folder. You can enter its path manually. {error}",
+                    &[("error", error.to_string())],
+                );
                 match target {
                     FolderTarget::NewDownload => self.form_error = Some(message),
                     FolderTarget::Defaults => self.local_error = Some(message),
@@ -397,6 +416,15 @@ impl App {
         } else {
             snapshot.state.settings.theme
         };
+        let selected_language = if self.settings_open {
+            self.settings.language
+        } else {
+            snapshot.state.settings.language
+        };
+        if selected_language != self.applied_language {
+            self.applied_language = selected_language;
+            ctx.request_repaint();
+        }
         if selected != self.applied_theme {
             theme::apply(ctx, selected);
             self.applied_theme = selected;
@@ -440,13 +468,18 @@ impl App {
     }
 
     fn submit_add(&mut self, snapshot: &Snapshot) {
+        let language = self.applied_language;
         let validation = validate_url(&self.url).and_then(|_| validate_filename(&self.filename));
         if let Err(error) = validation {
-            self.form_error = Some(error.to_string());
+            self.form_error = Some(language.text(&error.to_string()).to_owned());
             return;
         }
         if !PathBuf::from(&self.directory).is_absolute() {
-            self.form_error = Some("Enter the full path to an existing folder.".into());
+            self.form_error = Some(
+                language
+                    .text("Enter the full path to an existing folder.")
+                    .into(),
+            );
             return;
         }
         if self.send(Command::Add {
@@ -466,6 +499,7 @@ impl App {
     }
 
     fn add_dialog(&mut self, ctx: &egui::Context, snapshot: &Snapshot) {
+        let language = self.applied_language;
         let colors = palette(ctx);
         if !self.add_open {
             return;
@@ -505,11 +539,11 @@ impl App {
             .show(ctx, |ui| {
                 ui.set_width((ctx.content_rect().width() - 112.).clamp(320., 488.));
                 ui.horizontal(|ui| {
-                    ui.label(title("New download", 22.));
+                    ui.label(title(language.text("New download"), 22.));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .add_enabled_ui(self.pending_add.is_none(), |ui| {
-                                icon_button(ui, Glyph::Close, "Close new download")
+                                icon_button(ui, Glyph::Close, language.text("Close new download"))
                             })
                             .inner
                             .clicked()
@@ -518,9 +552,12 @@ impl App {
                         }
                     });
                 });
-                secondary(ui, "Paste the file link and choose where to save it.");
+                secondary(
+                    ui,
+                    language.text("Paste the file link and choose where to save it."),
+                );
                 ui.add_space(12.);
-                field_label(ui, "Download link");
+                field_label(ui, language.text("Download link"));
                 let response = ui.add_sized(
                     [ui.available_width(), 38.],
                     egui::TextEdit::singleline(&mut self.url)
@@ -536,51 +573,62 @@ impl App {
                     self.filename = suggested_filename(&self.url);
                 }
                 ui.add_space(4.);
-                field_label(ui, "File name");
+                field_label(ui, language.text("File name"));
                 if ui
                     .add_sized(
                         [ui.available_width(), 38.],
                         egui::TextEdit::singleline(&mut self.filename)
                             .id(egui::Id::new("download-filename"))
                             .margin(egui::vec2(10., 9.))
-                            .hint_text("Filled in from your link"),
+                            .hint_text(language.text("Filled in from your link")),
                     )
                     .changed()
                 {
                     self.custom_filename = true;
                 }
                 ui.add_space(4.);
-                field_label(ui, "Save to");
+                field_label(ui, language.text("Save to"));
                 if folder_field(
                     ui,
+                    language,
                     "download-folder",
                     &mut self.directory,
                     self.folder_pending.is_some() || self.pending_add.is_some(),
                 ) {
                     self.choose_folder(FolderTarget::NewDownload);
                 }
-                small(ui, "Existing files are never replaced.");
+                small(ui, language.text("Existing files are never replaced."));
                 if let Some(error) = &self.form_error {
-                    notice(ui, error, colors.error, colors.error_surface);
+                    error_notice(ui, language, error, colors.error, colors.error_surface);
                 }
                 ui.add_space(12.);
                 ui.separator();
                 ui.add_space(6.);
                 ui.horizontal(|ui| {
-                    small(ui, "Enter to download");
+                    small(ui, language.text("Enter to download"));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let pending = self.pending_add.is_some();
                         if ui
                             .add_enabled(
                                 !pending,
-                                primary(ui, if pending { "Adding…" } else { "Download" }),
+                                primary(
+                                    ui,
+                                    if pending {
+                                        language.text("Adding…")
+                                    } else {
+                                        language.text("Download")
+                                    },
+                                ),
                             )
                             .clicked()
                         {
                             self.submit_add(snapshot);
                         }
                         if ui
-                            .add_enabled(!pending, egui::Button::new("Cancel").frame(false))
+                            .add_enabled(
+                                !pending,
+                                egui::Button::new(language.text("Cancel")).frame(false),
+                            )
                             .clicked()
                         {
                             self.add_open = false;
@@ -597,6 +645,7 @@ impl App {
     }
 
     fn settings_page(&mut self, ui: &mut egui::Ui, snapshot: &Snapshot) {
+        let language = self.applied_language;
         let colors = palette(ui.ctx());
         ui.spacing_mut().item_spacing.y = 6.;
         ui.spacing_mut().button_padding = egui::vec2(10., 6.);
@@ -605,13 +654,13 @@ impl App {
             if icon_button(
                 ui,
                 Glyph::Back,
-                "Back to downloads · Discard unsaved changes",
+                language.text("Back to downloads · Discard unsaved changes"),
             )
             .clicked()
             {
                 self.settings_open = false;
             }
-            ui.label(title("Settings", 22.));
+            ui.label(title(language.text("Settings"), 22.));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 small(ui, &format!("DownloadManager  {VERSION}"));
             });
@@ -629,15 +678,16 @@ impl App {
             .max_height(body_rect.height())
             .auto_shrink([false, false])
             .show(&mut body, |ui| {
-                settings_group(ui, "Downloads", |ui| {
+                settings_group(ui, language.text("Downloads"), |ui| {
                     ui.horizontal(|ui| {
-                        ui.label("Save folder");
+                        ui.label(language.text("Save folder"));
                         ui.allocate_ui_with_layout(
                             egui::vec2(ui.available_width(), 34.),
                             egui::Layout::left_to_right(egui::Align::Center),
                             |ui| {
                                 if folder_field(
                                     ui,
+                                    language,
                                     "default-folder",
                                     &mut self.settings_directory,
                                     self.folder_pending.is_some(),
@@ -649,31 +699,23 @@ impl App {
                     });
                     ui.add_space(3.);
                     ui.separator();
-                    setting_row(ui, "Simultaneous downloads", |ui| {
+                    setting_row(ui, language.text("Simultaneous downloads"), |ui| {
                         egui::ComboBox::from_id_salt("concurrency")
-                            .selected_text(format!(
-                                "{} {}",
-                                self.settings.concurrency,
-                                if self.settings.concurrency == 1 {
-                                    "file"
-                                } else {
-                                    "files"
-                                }
-                            ))
+                            .selected_text(self.settings.concurrency.to_string())
                             .width(110.)
                             .show_ui(ui, |ui| {
                                 for n in 1..=4 {
                                     ui.selectable_value(
                                         &mut self.settings.concurrency,
                                         n,
-                                        format!("{n} {}", if n == 1 { "file" } else { "files" }),
+                                        n.to_string(),
                                     );
                                 }
                             });
                     });
-                    setting_row(ui, "Download speed", |ui| {
+                    setting_row(ui, language.text("Download speed"), |ui| {
                         let mut limited = self.settings.bandwidth_kib > 0;
-                        if switch(ui, &mut limited, "Limit download speed").changed() {
+                        if switch(ui, &mut limited, language.text("Limit download speed")).changed() {
                             self.settings.bandwidth_kib = if limited { 1024 } else { 0 };
                         }
                         if limited {
@@ -684,38 +726,48 @@ impl App {
                                     .speed(64.),
                             );
                         } else {
-                            small(ui, "Unlimited");
+                            small(ui, language.text("Unlimited"));
                         }
                     });
                 });
                 ui.add_space(6.);
-                settings_group(ui, "Appearance & behavior", |ui| {
-                    setting_row(ui, "Theme", |ui| {
+                settings_group(ui, language.text("Appearance & behavior"), |ui| {
+                    setting_row(ui, language.text("Language"), |ui| {
+                        egui::ComboBox::from_id_salt("language")
+                            .selected_text(self.settings.language.native_name())
+                            .width(140.)
+                            .show_ui(ui, |ui| {
+                                for option in Language::ALL {
+                                    ui.selectable_value(&mut self.settings.language, option, option.native_name());
+                                }
+                            });
+                    });
+                    setting_row(ui, language.text("Theme"), |ui| {
                         egui::ComboBox::from_id_salt("theme")
                             .selected_text(match self.settings.theme {
-                                Theme::Dark => "Dark",
-                                Theme::Light => "Light",
+                                Theme::Dark => language.text("Dark"),
+                                Theme::Light => language.text("Light"),
                             })
                             .width(110.)
                             .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.settings.theme, Theme::Dark, "Dark");
+                                ui.selectable_value(&mut self.settings.theme, Theme::Dark, language.text("Dark"));
                                 ui.selectable_value(
                                     &mut self.settings.theme,
                                     Theme::Light,
-                                    "Light",
+                                    language.text("Light"),
                                 );
                             });
                     });
-                    setting_row(ui, "Keep running when closed", |ui| {
+                    setting_row(ui, language.text("Keep running when closed"), |ui| {
                         switch(
                             ui,
                             &mut self.settings.close_to_tray,
-                            "Keep downloads running in the tray when the window closes",
+                            language.text("Keep downloads running in the tray when the window closes"),
                         );
                     });
                 });
                 ui.add_space(6.);
-                settings_group(ui, "Updates", |ui| {
+                settings_group(ui, language.text("Updates"), |ui| {
                     let busy = matches!(
                         snapshot.update,
                         UpdateStatus::Checking
@@ -723,10 +775,10 @@ impl App {
                             | UpdateStatus::Staged(_)
                     );
                     ui.horizontal(|ui| {
-                        ui.label("Check on startup");
+                        ui.label(language.text("Check on startup"));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
-                                .add_enabled(!busy, egui::Button::new("Check for updates"))
+                                .add_enabled(!busy, egui::Button::new(language.text("Check for updates")))
                                 .clicked()
                             {
                                 self.send(Command::CheckUpdates);
@@ -734,53 +786,49 @@ impl App {
                             switch(
                                 ui,
                                 &mut self.settings.startup_update_check,
-                                "Check for updates automatically at startup",
+                                language.text("Check for updates automatically at startup"),
                             );
                         });
                     });
                     match &snapshot.update {
                         UpdateStatus::Idle => {}
                         UpdateStatus::Checking => {
-                            small(ui, "Checking for an update…");
+                            small(ui, language.text("Checking for an update…"));
                         }
                         UpdateStatus::Current => {
-                            ui.colored_label(colors.success, "You're up to date.");
+                            ui.colored_label(colors.success, language.text("You're up to date."));
                         }
                         UpdateStatus::Error(error) => {
                             ui.colored_label(
                                 colors.error,
-                                "Couldn't check for updates. Try again later.",
+                                language.text("Couldn't check for updates. Try again later."),
                             );
-                            egui::CollapsingHeader::new("Error details").show(ui, |ui| {
-                                ui.label(error);
+                            egui::CollapsingHeader::new(language.text("Error details")).show(ui, |ui| {
+                                ui.label(language.text(error));
                             });
                         }
                         UpdateStatus::Available(release) => {
                             ui.label(
-                                title(format!("Version {} is available", release.version), 15.)
+                                title(language.format("Version {version} is available", &[("version", release.version.to_string())]), 15.)
                                     .color(colors.success),
                             );
                             small(
                                 ui,
-                                "Downloads pause during installation. Files and settings are kept.",
+                                language.text("Downloads pause during installation. Files and settings are kept."),
                             );
-                            if ui.add(primary(ui, "Download and install")).clicked() {
+                            if ui.add(primary(ui, language.text("Download and install"))).clicked() {
                                 self.send(Command::InstallUpdate);
                             }
                         }
                         UpdateStatus::Downloading { bytes: done, total } => {
                             small(
                                 ui,
-                                &format!(
-                                    "Downloading update · {} / {}",
-                                    bytes(*done),
-                                    bytes(*total)
-                                ),
+                                &language.format("Downloading update · {done} / {total}", &[("done", bytes(*done)), ("total", bytes(*total))]),
                             );
                             progress(ui, *done as f32 / (*total).max(1) as f32, colors.accent);
                         }
                         UpdateStatus::Staged(_) => {
-                            small(ui, "Update verified. Saving your queue before restarting…");
+                            small(ui, language.text("Update verified. Saving your queue before restarting…"));
                         }
                     }
                 });
@@ -799,15 +847,20 @@ impl App {
         if let Some(error) = self.local_error.as_ref().or(snapshot.notice.as_ref()) {
             footer
                 .add(
-                    egui::Label::new(RichText::new(error).size(12.).color(colors.error)).truncate(),
+                    egui::Label::new(
+                        RichText::new(language.error_summary(error))
+                            .size(12.)
+                            .color(colors.error),
+                    )
+                    .truncate(),
                 )
                 .on_hover_text(error);
         } else if self.saved_settings && !changed {
-            small(&mut footer, "All changes saved");
+            small(&mut footer, language.text("All changes saved"));
         } else if changed {
-            small(&mut footer, "Unsaved changes");
+            small(&mut footer, language.text("Unsaved changes"));
         } else {
-            small(&mut footer, "Changes apply after saving");
+            small(&mut footer, language.text("Changes apply after saving"));
         }
         let save_rect = egui::Rect::from_min_max(
             egui::pos2(footer_rect.right() - 116., footer_rect.top()),
@@ -817,7 +870,7 @@ impl App {
         if save
             .add_enabled(
                 changed,
-                primary(&save, "Save changes").min_size(save_rect.size()),
+                primary(&save, language.text("Save changes")).min_size(save_rect.size()),
             )
             .clicked()
         {
@@ -826,6 +879,7 @@ impl App {
     }
 
     fn download_row(&mut self, ui: &mut egui::Ui, job: &Download) {
+        let language = self.applied_language;
         let colors = palette(ui.ctx());
         let filename = job
             .destination
@@ -843,7 +897,7 @@ impl App {
                     ui.add_space(2.);
                     let action_width = if job.status == Status::Completed {
                         160.
-                    } else if job_action(job).is_some() {
+                    } else if job_action(job, language).is_some() {
                         118.
                     } else {
                         32.
@@ -859,9 +913,9 @@ impl App {
                                 let host = url::Url::parse(&job.url)
                                     .ok()
                                     .and_then(|u| u.host_str().map(str::to_owned))
-                                    .unwrap_or_else(|| "Download".into());
+                                    .unwrap_or_else(|| language.text("Download").into());
                                 small(ui, &host);
-                                let (label, color) = status_label(job.status, colors);
+                                let (label, color) = status_label(job.status, colors, language);
                                 badge(
                                     ui,
                                     label,
@@ -880,13 +934,13 @@ impl App {
                         self.job_menu(ui, job);
                         if job.status == Status::Completed
                             && ui
-                                .button("Open folder")
+                                .button(language.text("Open folder"))
                                 .on_hover_text(job.destination.display().to_string())
                                 .clicked()
                         {
                             self.open_folder(job);
                         }
-                        if let Some((label, command)) = job_action(job)
+                        if let Some((label, command)) = job_action(job, language)
                             && ui
                                 .add(
                                     egui::Button::new(title(label, 13.))
@@ -915,14 +969,20 @@ impl App {
                 small(
                     ui,
                     &if job.status == Status::Completed {
-                        format!(
-                            "{} · Saved to {}",
-                            bytes(job.bytes),
-                            job.destination
-                                .parent()
-                                .and_then(|p| p.file_name())
-                                .unwrap_or_default()
-                                .to_string_lossy()
+                        language.format(
+                            "{size} · Saved to {folder}",
+                            &[
+                                ("size", bytes(job.bytes)),
+                                (
+                                    "folder",
+                                    job.destination
+                                        .parent()
+                                        .and_then(|p| p.file_name())
+                                        .unwrap_or_default()
+                                        .to_string_lossy()
+                                        .into_owned(),
+                                ),
+                            ],
                         )
                     } else {
                         format!(
@@ -930,7 +990,7 @@ impl App {
                             bytes(job.bytes),
                             job.total
                                 .map(bytes)
-                                .unwrap_or_else(|| "Unknown size".into())
+                                .unwrap_or_else(|| language.text("Unknown size").into())
                         )
                     },
                 );
@@ -939,9 +999,15 @@ impl App {
                         if let Some(total) = job.total.filter(|_| job.speed > 0.) {
                             small(
                                 ui,
-                                &format!(
-                                    "{} left",
-                                    duration(total.saturating_sub(job.bytes) as f64 / job.speed)
+                                &language.format(
+                                    "{time} left",
+                                    &[(
+                                        "time",
+                                        duration(
+                                            total.saturating_sub(job.bytes) as f64 / job.speed,
+                                            language,
+                                        ),
+                                    )],
                                 ),
                             );
                         }
@@ -967,47 +1033,54 @@ impl App {
                             glyph(ui, rect, Glyph::Alert, colors.error);
                             ui.add(
                                 egui::Label::new(
-                                    RichText::new(error).size(13.).color(colors.error),
+                                    RichText::new(language.error_summary(error))
+                                        .size(13.)
+                                        .color(colors.error),
                                 )
                                 .truncate(),
                             )
                             .on_hover_text(error);
                         });
-                        egui::CollapsingHeader::new("Partial file saved · Recovery options")
-                            .id_salt(job.id)
-                            .show(ui, |ui| {
-                                ui.label(error);
-                                if matches!(
-                                    job.status,
-                                    Status::Failed | Status::Paused | Status::Canceled
-                                ) && ui.button("Restart from zero…").clicked()
-                                {
-                                    self.restart = Some(job.id);
-                                }
-                            });
+                        egui::CollapsingHeader::new(
+                            language.text("Partial file saved · Recovery options"),
+                        )
+                        .id_salt(job.id)
+                        .show(ui, |ui| {
+                            ui.label(language.text(error));
+                            if matches!(
+                                job.status,
+                                Status::Failed | Status::Paused | Status::Canceled
+                            ) && ui.button(language.text("Restart from zero…")).clicked()
+                            {
+                                self.restart = Some(job.id);
+                            }
+                        });
                     });
             }
         });
     }
 
     fn job_menu(&mut self, ui: &mut egui::Ui, job: &Download) {
+        let language = self.applied_language;
         let button = egui::Button::new("•••")
             .frame(false)
             .min_size(egui::vec2(32., 32.));
         let response = egui::containers::menu::MenuButton::from_button(button)
             .ui(ui, |ui| {
                 ui.set_max_width(420.);
-                field_label(ui, "Save location");
+                field_label(ui, language.text("Save location"));
                 ui.label(job.destination.display().to_string());
                 ui.separator();
-                if job.status == Status::Queued && ui.button("Move up in queue").clicked() {
+                if job.status == Status::Queued
+                    && ui.button(language.text("Move up in queue")).clicked()
+                {
                     self.send(Command::MoveUp(job.id));
                     ui.close();
                 }
                 if matches!(
                     job.status,
                     Status::Paused | Status::Failed | Status::Canceled
-                ) && ui.button("Restart from zero…").clicked()
+                ) && ui.button(language.text("Restart from zero…")).clicked()
                 {
                     self.restart = Some(job.id);
                     ui.close();
@@ -1015,12 +1088,14 @@ impl App {
                 if matches!(
                     job.status,
                     Status::Downloading | Status::Queued | Status::Paused | Status::Failed
-                ) && ui.button("Cancel download").clicked()
+                ) && ui.button(language.text("Cancel download")).clicked()
                 {
                     self.send(Command::Cancel(job.id));
                     ui.close();
                 }
-                if job.status == Status::Completed && ui.button("Remove from history").clicked() {
+                if job.status == Status::Completed
+                    && ui.button(language.text("Remove from history")).clicked()
+                {
                     self.send(Command::RemoveCompleted(job.id));
                     ui.close();
                 }
@@ -1030,35 +1105,43 @@ impl App {
             egui::WidgetInfo::labeled(
                 egui::WidgetType::Button,
                 ui.is_enabled(),
-                "More download actions",
+                language.text("More download actions"),
             )
         });
-        response.on_hover_text("More download actions");
+        response.on_hover_text(language.text("More download actions"));
     }
 
     fn open_folder(&mut self, job: &Download) {
+        let language = self.applied_language;
         #[cfg(windows)]
         if let Some(folder) = job.destination.parent()
             && let Err(error) = std::process::Command::new("explorer.exe")
                 .arg(folder)
                 .spawn()
         {
-            self.local_error = Some(format!(
-                "Couldn't open the save folder. {}: {error}",
-                folder.display()
+            self.local_error = Some(language.format(
+                "Couldn't open the save folder. {folder}: {error}",
+                &[
+                    ("folder", folder.display().to_string()),
+                    ("error", error.to_string()),
+                ],
             ));
         }
         #[cfg(not(windows))]
         {
             let _ = job;
-            self.local_error =
-                Some("Opening a save folder is currently supported on Windows only.".into());
+            self.local_error = Some(
+                language
+                    .text("Opening a save folder is currently supported on Windows only.")
+                    .into(),
+            );
         }
     }
 
     pub fn update(&mut self, ctx: &egui::Context) {
         let snapshot = self.snapshot();
         self.sync_theme(ctx, &snapshot);
+        let language = self.applied_language;
         let colors = palette(ctx);
         if snapshot.stopped && snapshot.fatal.is_none() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1086,7 +1169,7 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui
                             .add_enabled_ui(snapshot.ready, |ui| {
-                                icon_button(ui, Glyph::Settings, "Settings")
+                                icon_button(ui, Glyph::Settings, language.text("Settings"))
                             })
                             .inner
                             .clicked()
@@ -1096,9 +1179,9 @@ impl App {
                         if ui
                             .add_enabled(
                                 snapshot.ready && !snapshot.stopping,
-                                primary(ui, "+ New download"),
+                                primary(ui, language.text("+ New download")),
                             )
-                            .on_hover_text("New download · Ctrl+N")
+                            .on_hover_text(language.text("New download · Ctrl+N"))
                             .clicked()
                         {
                             self.open_add(&snapshot);
@@ -1106,7 +1189,7 @@ impl App {
                     });
                 });
                 ui.add_space(10.);
-                ui.label(title("Downloads", 28.));
+                ui.label(title(language.text("Downloads"), 28.));
                 let completed = snapshot
                     .state
                     .downloads
@@ -1123,40 +1206,44 @@ impl App {
                 secondary(
                     ui,
                     if self.completed {
-                        "Open a save folder or manage your history."
+                        language.text("Open a save folder or manage your history.")
                     } else if active > 0 {
-                        "Your downloads are on their way."
+                        language.text("Your downloads are on their way.")
                     } else if pending > 0 {
-                        "Pick up where you left off."
+                        language.text("Pick up where you left off.")
                     } else {
-                        "Your files, in one place."
+                        language.text("Your files, in one place.")
                     },
                 );
                 ui.add_space(4.);
                 if let Some(error) = self.startup_error.as_ref().or(snapshot.fatal.as_ref()) {
                     notice(
                         ui,
-                        "Couldn't open your queue",
+                        language.text("Couldn't open your queue"),
                         colors.error,
                         colors.error_surface,
                     );
-                    ui.label(error);
+                    egui::CollapsingHeader::new(language.text("Error details")).show(ui, |ui| {
+                        ui.label(language.text(error));
+                    });
                     return;
                 }
                 if !snapshot.ready {
-                    secondary(ui, "Loading your saved downloads…");
+                    secondary(ui, language.text("Loading your saved downloads…"));
                     return;
                 }
                 if let Some(error) = self.local_error.as_ref().or(snapshot.notice.as_ref()) {
-                    notice(ui, error, colors.error, colors.error_surface);
+                    error_notice(ui, language, error, colors.error, colors.error_surface);
                 }
                 if matches!(snapshot.update, UpdateStatus::Available(_))
-                    && ui.link("Update available · Open settings").clicked()
+                    && ui
+                        .link(language.text("Update available · Open settings"))
+                        .clicked()
                 {
                     self.open_settings();
                 }
                 if snapshot.stopping {
-                    secondary(ui, "Saving your downloads before closing…");
+                    secondary(ui, language.text("Saving your downloads before closing…"));
                 }
                 let footer_height = 28.;
                 let full = ui.available_rect_before_wrap();
@@ -1172,10 +1259,11 @@ impl App {
                 body.set_clip_rect(body_rect.intersect(ui.clip_rect()));
                 body.add_enabled_ui(!snapshot.stopping, |ui| {
                     ui.horizontal(|ui| {
-                        if tab(ui, "Queue", pending, !self.completed).clicked() {
+                        if tab(ui, language.text("Queue"), pending, !self.completed).clicked() {
                             self.completed = false;
                         }
-                        if tab(ui, "Completed", completed, self.completed).clicked() {
+                        if tab(ui, language.text("Completed"), completed, self.completed).clicked()
+                        {
                             self.completed = true;
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1183,7 +1271,7 @@ impl App {
                                 if snapshot.state.downloads.iter().any(|j| {
                                     matches!(j.status, Status::Downloading | Status::Queued)
                                 }) && ui
-                                    .add(egui::Button::new("Pause all").frame(false))
+                                    .add(egui::Button::new(language.text("Pause all")).frame(false))
                                     .clicked()
                                 {
                                     self.send(Command::PauseAll);
@@ -1194,7 +1282,10 @@ impl App {
                                     .iter()
                                     .any(|j| j.status == Status::Paused)
                                     && ui
-                                        .add(egui::Button::new("Resume paused").frame(false))
+                                        .add(
+                                            egui::Button::new(language.text("Resume paused"))
+                                                .frame(false),
+                                        )
                                         .clicked()
                                 {
                                     self.send(Command::ResumeAll);
@@ -1234,26 +1325,30 @@ impl App {
                         empty.add_space(16.);
                         empty.label(title(
                             if self.completed {
-                                "A home for your finished downloads"
+                                language.text("A home for your finished downloads")
                             } else {
-                                "Your next download starts here"
+                                language.text("Your next download starts here")
                             },
                             22.,
                         ));
                         secondary(
                             &mut empty,
                             if self.completed {
-                                "Completed files stay in the folder you chose."
+                                language.text("Completed files stay in the folder you chose.")
                             } else {
-                                "Paste a link. Choose a folder. We'll handle the rest."
+                                language
+                                    .text("Paste a link. Choose a folder. We'll handle the rest.")
                             },
                         );
                         empty.add_space(10.);
                         if !self.completed {
-                            if empty.add(primary(&empty, "+ Add a download")).clicked() {
+                            if empty
+                                .add(primary(&empty, language.text("+ Add a download")))
+                                .clicked()
+                            {
                                 self.open_add(&snapshot);
                             }
-                            small(&mut empty, "or press Ctrl+N");
+                            small(&mut empty, language.text("or press Ctrl+N"));
                         }
                     } else {
                         egui::ScrollArea::vertical()
@@ -1300,23 +1395,32 @@ impl App {
                 small(
                     &mut footer,
                     &if failures > 0 {
-                        format!(
-                            "{pending} in queue · {failures} {} attention",
-                            if failures == 1 { "needs" } else { "need" }
+                        language.format(
+                            "{count} in queue · {errors} need attention",
+                            &[
+                                ("count", pending.to_string()),
+                                ("errors", failures.to_string()),
+                            ],
                         )
                     } else if pending > 0 {
-                        format!("{pending} in queue · {active} downloading")
+                        language.format(
+                            "{count} in queue · {active} downloading",
+                            &[
+                                ("count", pending.to_string()),
+                                ("active", active.to_string()),
+                            ],
+                        )
                     } else {
-                        "Ready for a new download".into()
+                        language.text("Ready for a new download").into()
                     },
                 );
                 footer.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     small(
                         ui,
                         if snapshot.state.settings.close_to_tray {
-                            "Close to keep downloading in the tray"
+                            language.text("Close to keep downloading in the tray")
                         } else {
-                            "Closing exits DownloadManager"
+                            language.text("Closing exits DownloadManager")
                         },
                     );
                 });
@@ -1327,12 +1431,12 @@ impl App {
                 .frame(egui::Frame::new().fill(colors.surface).inner_margin(24.).corner_radius(12.).stroke(Stroke::new(1., colors.border)))
                 .show(ctx, |ui| {
                     ui.set_max_width(420.);
-                    ui.label(title("Restart this download?", 22.));
-                    ui.label("This discards the partial file and downloads it again. Existing completed files are kept.");
+                    ui.label(title(language.text("Restart this download?"), 22.));
+                    ui.label(language.text("This discards the partial file and downloads it again. Existing completed files are kept."));
                     ui.add_space(12.);
                     ui.horizontal(|ui| {
-                        if ui.button("Keep partial file").clicked() { self.restart = None; }
-                        if ui.add(primary(ui, "Restart download")).clicked() {
+                        if ui.button(language.text("Keep partial file")).clicked() { self.restart = None; }
+                        if ui.add(primary(ui, language.text("Restart download"))).clicked() {
                             self.send(Command::Restart(id));
                             self.restart = None;
                         }
@@ -1362,7 +1466,13 @@ fn small(ui: &mut egui::Ui, text: &str) {
 fn field_label(ui: &mut egui::Ui, text: &str) {
     ui.label(title(text, 13.));
 }
-fn folder_field(ui: &mut egui::Ui, id: &str, value: &mut String, busy: bool) -> bool {
+fn folder_field(
+    ui: &mut egui::Ui,
+    language: Language,
+    id: &str,
+    value: &mut String,
+    busy: bool,
+) -> bool {
     ui.horizontal(|ui| {
         ui.add_sized(
             [
@@ -1376,12 +1486,20 @@ fn folder_field(ui: &mut egui::Ui, id: &str, value: &mut String, busy: bool) -> 
         .on_hover_text(value.as_str());
         ui.add_enabled(
             !busy,
-            egui::Button::new("Browse…").min_size(egui::vec2(95., 34.)),
+            egui::Button::new(language.text("Browse…")).min_size(egui::vec2(95., 34.)),
         )
-        .on_hover_text("Choose a folder")
+        .on_hover_text(language.text("Choose a folder"))
         .clicked()
     })
     .inner
+}
+fn error_notice(ui: &mut egui::Ui, language: Language, diagnostic: &str, fg: Color32, bg: Color32) {
+    notice(ui, language.error_summary(diagnostic), fg, bg);
+    if language.error_summary(diagnostic) != language.text(diagnostic) {
+        egui::CollapsingHeader::new(language.text("Error details")).show(ui, |ui| {
+            ui.label(diagnostic);
+        });
+    }
 }
 fn notice(ui: &mut egui::Ui, text: &str, fg: Color32, bg: Color32) {
     egui::Frame::new()
@@ -1412,15 +1530,15 @@ fn setting_row(ui: &mut egui::Ui, label: &str, contents: impl FnOnce(&mut egui::
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), contents);
     });
 }
-fn status_label(status: Status, c: theme::Palette) -> (&'static str, Color32) {
+fn status_label(status: Status, c: theme::Palette, language: Language) -> (&'static str, Color32) {
     match status {
-        Status::Queued => ("Waiting", c.muted),
-        Status::Downloading => ("Downloading", c.accent),
-        Status::Pausing => ("Pausing…", c.muted),
-        Status::Paused => ("Paused", c.muted),
-        Status::Canceled => ("Canceled", c.muted),
-        Status::Failed => ("Needs attention", c.error),
-        Status::Completed => ("Complete", c.success),
+        Status::Queued => (language.text("Waiting"), c.muted),
+        Status::Downloading => (language.text("Downloading"), c.accent),
+        Status::Pausing => (language.text("Pausing…"), c.muted),
+        Status::Paused => (language.text("Paused"), c.muted),
+        Status::Canceled => (language.text("Canceled"), c.muted),
+        Status::Failed => (language.text("Needs attention"), c.error),
+        Status::Completed => (language.text("Complete"), c.success),
     }
 }
 fn fraction(job: &Download) -> f32 {
@@ -1434,11 +1552,15 @@ fn fraction(job: &Download) -> f32 {
             .clamp(0., 1.)
     }
 }
-fn job_action(job: &Download) -> Option<(&'static str, Command)> {
+fn job_action(job: &Download, language: Language) -> Option<(&'static str, Command)> {
     match job.status {
-        Status::Downloading | Status::Queued => Some(("Pause", Command::Pause(job.id))),
-        Status::Paused | Status::Canceled => Some(("Resume", Command::Resume(job.id))),
-        Status::Failed => Some(("Retry", Command::Resume(job.id))),
+        Status::Downloading | Status::Queued => {
+            Some((language.text("Pause"), Command::Pause(job.id)))
+        }
+        Status::Paused | Status::Canceled => {
+            Some((language.text("Resume"), Command::Resume(job.id)))
+        }
+        Status::Failed => Some((language.text("Retry"), Command::Resume(job.id))),
         _ => None,
     }
 }
@@ -1453,11 +1575,23 @@ fn bytes(value: u64) -> String {
         format!("{:.2} GiB", value as f64 / (1024.0 * 1024.0 * 1024.0))
     }
 }
-fn duration(seconds: f64) -> String {
+fn duration(seconds: f64, language: Language) -> String {
     let seconds = seconds.max(0.0) as u64;
     if seconds >= 3600 {
-        format!("{}h {}m", seconds / 3600, seconds % 3600 / 60)
+        language.format(
+            "{hours}h {minutes}m",
+            &[
+                ("hours", (seconds / 3600).to_string()),
+                ("minutes", (seconds % 3600 / 60).to_string()),
+            ],
+        )
     } else {
-        format!("{}m {}s", seconds / 60, seconds % 60)
+        language.format(
+            "{minutes}m {seconds}s",
+            &[
+                ("minutes", (seconds / 60).to_string()),
+                ("seconds", (seconds % 60).to_string()),
+            ],
+        )
     }
 }

@@ -1,4 +1,4 @@
-use download_manager::{manager::Snapshot, model::Status};
+use download_manager::{i18n::Language, manager::Snapshot, model::Status};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
@@ -12,6 +12,7 @@ pub enum Command {
 }
 
 pub fn tooltip(snapshot: &Snapshot) -> String {
+    let language = snapshot.state.settings.language;
     let active = snapshot
         .state
         .downloads
@@ -31,11 +32,26 @@ pub fn tooltip(snapshot: &Snapshot) -> String {
         .filter(|d| d.status == Status::Failed)
         .count();
     if snapshot.stopping {
-        "DownloadManager · Saving downloads before exit".into()
+        language
+            .text("DownloadManager · Saving downloads before exit")
+            .into()
     } else if errors > 0 {
-        format!("DownloadManager · {active} active · {waiting} waiting · {errors} need attention")
+        language.format(
+            "DownloadManager · {active} active · {waiting} waiting · {errors} need attention",
+            &[
+                ("active", active.to_string()),
+                ("waiting", waiting.to_string()),
+                ("errors", errors.to_string()),
+            ],
+        )
     } else {
-        format!("DownloadManager · {active} active · {waiting} waiting")
+        language.format(
+            "DownloadManager · {active} active · {waiting} waiting",
+            &[
+                ("active", active.to_string()),
+                ("waiting", waiting.to_string()),
+            ],
+        )
     }
 }
 
@@ -48,6 +64,10 @@ pub struct Tray {
     resume: tray_icon::menu::MenuItem,
     new: tray_icon::menu::MenuItem,
     last_enabled: Option<(bool, bool, bool)>,
+    open: tray_icon::menu::MenuItem,
+    settings: tray_icon::menu::MenuItem,
+    quit: tray_icon::menu::MenuItem,
+    language: Option<Language>,
 }
 
 #[cfg(windows)]
@@ -155,9 +175,23 @@ impl Tray {
             resume,
             new,
             last_enabled: None,
+            open,
+            settings,
+            quit,
+            language: None,
         })
     }
     pub fn update(&mut self, snapshot: &Snapshot) {
+        let language = snapshot.state.settings.language;
+        if self.language != Some(language) {
+            self.open.set_text(language.text("Show downloads"));
+            self.new.set_text(language.text("New download"));
+            self.pause.set_text(language.text("Pause all"));
+            self.resume.set_text(language.text("Resume paused"));
+            self.settings.set_text(language.text("Settings"));
+            self.quit.set_text(language.text("Quit DownloadManager"));
+            self.language = Some(language);
+        }
         let enabled = (
             snapshot
                 .state

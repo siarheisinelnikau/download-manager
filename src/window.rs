@@ -435,7 +435,7 @@ impl CpuHost {
         if let Err(error) = std::thread::Builder::new()
             .name("folder-picker".into())
             .spawn(move || {
-                let result = crate::folder_picker::show(owner, &request.initial)
+                let result = crate::folder_picker::show(owner, &request.initial, request.language)
                     .map_err(|e| format!("{e:#}"));
                 drop(owner_window);
                 let _ = proxy.send_event(UserEvent::FolderSelected {
