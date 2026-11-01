@@ -11,6 +11,7 @@ pub struct Request {
     pub generation: u64,
     pub target: Target,
     pub initial: PathBuf,
+    pub language: download_manager::i18n::Language,
 }
 
 #[cfg(windows)]
@@ -31,7 +32,7 @@ mod native {
                 SIGDN_FILESYSPATH,
             },
         },
-        core::{HSTRING, w},
+        core::HSTRING,
     };
 
     struct Apartment;
@@ -49,7 +50,10 @@ mod native {
         }
     }
 
-    fn configured(initial: &Path) -> Result<IFileOpenDialog> {
+    fn configured(
+        initial: &Path,
+        language: download_manager::i18n::Language,
+    ) -> Result<IFileOpenDialog> {
         // All COM objects stay on this dedicated STA until they are released.
         let dialog: IFileOpenDialog =
             unsafe { CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER) }
@@ -62,8 +66,8 @@ mod native {
                     | FOS_PATHMUSTEXIST
                     | FOS_NOCHANGEDIR,
             )?;
-            dialog.SetTitle(w!("Choose download folder"))?;
-            dialog.SetOkButtonLabel(w!("Select folder"))?;
+            dialog.SetTitle(&HSTRING::from(language.text("Choose download folder")))?;
+            dialog.SetOkButtonLabel(&HSTRING::from(language.text("Select folder")))?;
             if let Some(folder) = initial.ancestors().find(|p| p.is_absolute() && p.is_dir()) {
                 let item: IShellItem =
                     SHCreateItemFromParsingName(&HSTRING::from(folder.as_os_str()), None)?;
@@ -81,9 +85,13 @@ mod native {
         Ok(result)
     }
 
-    pub fn show(owner: usize, initial: &Path) -> Result<Option<PathBuf>> {
+    pub fn show(
+        owner: usize,
+        initial: &Path,
+        language: download_manager::i18n::Language,
+    ) -> Result<Option<PathBuf>> {
         let _apartment = Apartment::new()?;
-        let dialog = configured(initial)?;
+        let dialog = configured(initial, language)?;
         if let Err(error) = unsafe { dialog.Show(Some(HWND(owner as _))) } {
             if error.code().0 == 0x800704c7u32 as i32 {
                 // HRESULT_FROM_WIN32(ERROR_CANCELLED)
@@ -101,7 +109,7 @@ mod native {
 
     pub fn probe(initial: &Path) -> Result<()> {
         let _apartment = Apartment::new()?;
-        let dialog = configured(initial)?;
+        let dialog = configured(initial, download_manager::i18n::Language::English)?;
         let actual = path(&unsafe { dialog.GetFolder() }?)?;
         anyhow::ensure!(
             actual.canonicalize()? == initial.canonicalize()?,
@@ -115,7 +123,11 @@ mod native {
 pub use native::{probe, show};
 
 #[cfg(not(windows))]
-pub fn show(_: usize, _: &Path) -> anyhow::Result<Option<PathBuf>> {
+pub fn show(
+    _: usize,
+    _: &Path,
+    _: download_manager::i18n::Language,
+) -> anyhow::Result<Option<PathBuf>> {
     anyhow::bail!("The folder dialog is supported on Windows only")
 }
 #[cfg(not(windows))]
