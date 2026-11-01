@@ -1,0 +1,142 @@
+{
+  "complete": true,
+  "executable": "E:\\work\\github\\download-manager\\dist\\DownloadManager-v0.3.0.exe",
+  "idle_hidden_render_gate": true,
+  "limitations": "No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation.",
+  "native_events": {
+    "Redraw": 4,
+    "Resized": 3
+  },
+  "navigation": false,
+  "new_download": false,
+  "pid": 37900,
+  "popup": false,
+  "renderer": "egui CPU rasterizer -> softbuffer Win32 GDI BitBlt",
+  "repaint_causes": {
+    "src\\ui.rs:426 ": 1
+  },
+  "samples": [
+    {
+      "counts": {
+        "layouts": 3,
+        "native_changes": 3,
+        "native_redraws": 3,
+        "presents": 3,
+        "rasters": 3
+      },
+      "cpu_one_core_percent": 0.7812117206256893,
+      "logical_size": [
+        960.0,
+        680.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        1054.0,
+        797.0
+      ],
+      "seconds": 2.000098,
+      "state": "visible_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        960.0,
+        680.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        1054.0,
+        797.0
+      ],
+      "seconds": 5.0003415,
+      "state": "visible_idle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        960.0,
+        680.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        1054.0,
+        797.0
+      ],
+      "seconds": 3.0002665,
+      "state": "hidden",
+      "visible": false
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 1,
+        "presents": 1,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        960.0,
+        680.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        1054.0,
+        797.0
+      ],
+      "seconds": 2.0002221,
+      "state": "restored_settle",
+      "visible": true
+    },
+    {
+      "counts": {
+        "layouts": 0,
+        "native_changes": 0,
+        "native_redraws": 0,
+        "presents": 0,
+        "rasters": 0
+      },
+      "cpu_one_core_percent": 0.0,
+      "logical_size": [
+        960.0,
+        680.0
+      ],
+      "minimized": false,
+      "outer_rect": [
+        78.0,
+        78.0,
+        1054.0,
+        797.0
+      ],
+      "seconds": 5.0002378,
+      "state": "restored_idle",
+      "visible": true
+    }
+  ],
+  "settings_page": false,
+  "tray_lifecycle": false
+}

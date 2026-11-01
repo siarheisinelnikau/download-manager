@@ -1,21 +1,23 @@
 param(
     [switch]$Diagnose,
     [ValidateSet('Dark','Light')][string]$Theme = 'Dark',
-    [switch]$SkipTray
+    [switch]$SkipTray,
+    [ValidateSet('en','ru','fr','de','es','it')][string]$Language = 'en'
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'project-info.ps1')
 $package = Get-DownloadManagerPackage $repo
-$fixture = Join-Path $repo ('.local/gui-smoke/design/' + $Theme.ToLowerInvariant())
+$fixture = Join-Path $repo ('.local/gui-smoke/design/' + $Theme.ToLowerInvariant() + '/' + $Language)
 $suffix = if ($Theme -eq 'Light') { '-light' } else { '' }
+if ($Language -ne 'en') { $suffix = '-' + $Language + $suffix }
 $downloads = Join-Path $repo '.local/Downloads'
 $screenshots = Join-Path $repo 'docs/screenshots'
 $previousData = $env:DOWNLOAD_MANAGER_DATA_DIR
 Push-Location $repo
 try {
     New-Item -ItemType Directory -Force $fixture, $downloads, $screenshots | Out-Null
-    $settings = @{concurrency=2; bandwidth_kib=0; startup_update_check=$false; default_directory=$downloads}
+    $settings = @{language=$Language; concurrency=2; bandwidth_kib=0; startup_update_check=$false; default_directory=$downloads}
     # Omission also verifies the dark default for existing settings without a theme.
     if ($Theme -eq 'Light') { $settings.theme = 'Light' }
     foreach ($scenario in @('empty', 'populated')) {

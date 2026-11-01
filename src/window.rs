@@ -493,7 +493,7 @@ impl CpuHost {
             }
             window.set_maximized(false);
             window.set_min_inner_size(Some(LogicalSize::new(560, 440)));
-            let _ = window.request_inner_size(LogicalSize::new(620, 500));
+            let _ = window.request_inner_size(LogicalSize::new(620, 560));
         } else {
             window.set_min_inner_size(Some(LogicalSize::new(760, 540)));
             if let Some((position, size, maximized)) = self.full_geometry.take() {
@@ -572,7 +572,7 @@ impl CpuHost {
             outer.height.saturating_sub(inner.height),
         );
         let width = 620f64.min(((work.2 - work.0 - 16. - frame.0 as f64) / scale).max(1.));
-        let height = 500f64.min(((work.3 - work.1 - 16. - frame.1 as f64) / scale).max(1.));
+        let height = 560f64.min(((work.3 - work.1 - 16. - frame.1 as f64) / scale).max(1.));
         window.set_min_inner_size(Some(LogicalSize::new(
             560f64.min(width),
             440f64.min(height),
@@ -1285,7 +1285,7 @@ fn run_mode(
     if host.popup {
         host.size = (400, 432);
     } else if host.settings_compact {
-        host.size = (620, 500);
+        host.size = (620, 560);
     }
     if host.capture.is_none() && host.diagnostic.as_ref().is_none_or(|d| d.tray) {
         let sender = host.tray_sender.clone();

@@ -1,0 +1,39 @@
+{
+  "Path": "dist/DownloadManager-v0.3.0.exe",
+  "Bytes": 8459264,
+  "FileVersion": "0.3.0",
+  "ProductVersion": "0.3.0",
+  "OriginalFilename": "DownloadManager-v0.3.0.exe",
+  "Machine": "x64",
+  "Subsystem": "Windows GUI",
+  "IconResources": true,
+  "IconDecodedSizes": [
+    16,
+    20,
+    24,
+    32,
+    48,
+    64,
+    256
+  ],
+  "Imports": [
+    "advapi32.dll",
+    "api-ms-win-core-synch-l1-2-0.dll",
+    "bcrypt.dll",
+    "bcryptprimitives.dll",
+    "comctl32.dll",
+    "crypt32.dll",
+    "dwmapi.dll",
+    "gdi32.dll",
+    "imm32.dll",
+    "KERNEL32.dll",
+    "ntdll.dll",
+    "ole32.dll",
+    "oleaut32.dll",
+    "secur32.dll",
+    "shell32.dll",
+    "USER32.dll",
+    "uxtheme.dll",
+    "ws2_32.dll"
+  ]
+}
