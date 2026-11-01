@@ -75,3 +75,9 @@ For migration, older DownloadManager versions pass target/staged/hash/PID to the
 - [egui 0.33.3](https://docs.rs/egui/0.33.3/egui/)
 - [softbuffer 0.4.8](https://docs.rs/softbuffer/0.4.8/softbuffer/)
 
+
+## Interface language and appearance
+
+`Settings.language` stores the interface locale (`en`, `ru`, `fr`, `de`, `es`, `it`); absent or unknown values fall back to English without replacing other preferences. The embedded `src/locales.tsv` catalog is indexed once on first use. Static UI messages use explicit lookups, and parameterized messages replace template fields without interpreting the inserted file names, paths or diagnostic text. Raw technical errors remain available separately from translated consumer-facing summaries.
+
+The existing Settings draft previews Language and Theme immediately. Save changes persists the complete draft through the coordinator; Back discards unsaved changes. A locale or theme transition requests a bounded repaint only when the selection changes. Native tray menu captions update only when the saved language changes; native folder-dialog titles use the language selected when the request starts. The CPU/GDI renderer and event-driven hidden-window scheduling remain shared by normal use and isolated capture mode.

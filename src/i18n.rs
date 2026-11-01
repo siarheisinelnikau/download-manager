@@ -4,9 +4,6 @@ use std::{collections::HashMap, sync::LazyLock};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Language {
-    #[default]
-    #[serde(rename = "en")]
-    English,
     #[serde(rename = "ru")]
     Russian,
     #[serde(rename = "fr")]
@@ -17,6 +14,9 @@ pub enum Language {
     Spanish,
     #[serde(rename = "it")]
     Italian,
+    #[default]
+    #[serde(rename = "en", other)]
+    English,
 }
 
 static CATALOG: LazyLock<HashMap<&'static str, [&'static str; 6]>> = LazyLock::new(|| {
@@ -53,25 +53,49 @@ impl Language {
     }
 
     pub fn text(self, english: &str) -> &str {
-        CATALOG
-            .get(english)
-            .map_or(english, |row| row[self as usize])
+        let index = match self {
+            Self::English => 0,
+            Self::Russian => 1,
+            Self::French => 2,
+            Self::German => 3,
+            Self::Spanish => 4,
+            Self::Italian => 5,
+        };
+        CATALOG.get(english).map_or(english, |row| row[index])
     }
 
     /// Localize the consumer-facing summary while preserving raw diagnostics separately.
     pub fn error_summary(self, diagnostic: &str) -> &str {
         if self == Self::English || CATALOG.contains_key(diagnostic) {
             self.text(diagnostic)
+        } else if let Some((context, _)) = diagnostic.split_once(": ")
+            && CATALOG.contains_key(context)
+        {
+            self.text(context)
         } else {
             self.text("The action couldn't finish. Open error details for more information.")
         }
     }
 
     pub fn format(self, english: &str, values: &[(&str, String)]) -> String {
-        let mut message = self.text(english).to_owned();
-        for (name, value) in values {
-            message = message.replace(&format!("{{{name}}}"), value);
+        let mut remaining = self.text(english);
+        let mut message = String::with_capacity(remaining.len());
+        while let Some(start) = remaining.find('{') {
+            message.push_str(&remaining[..start]);
+            let Some(end) = remaining[start..].find('}') else {
+                message.push_str(&remaining[start..]);
+                return message;
+            };
+            let end = start + end;
+            let name = &remaining[start + 1..end];
+            if let Some((_, value)) = values.iter().find(|(key, _)| *key == name) {
+                message.push_str(value);
+            } else {
+                message.push_str(&remaining[start..=end]);
+            }
+            remaining = &remaining[end + 1..];
         }
+        message.push_str(remaining);
         message
     }
 }
@@ -90,6 +114,17 @@ mod tests {
 
     #[test]
     fn catalogs_are_complete_unique_and_preserve_placeholders() {
+        assert_eq!(
+            Language::ALL.map(|language| language.text("Settings")),
+            [
+                "Settings",
+                "Настройки",
+                "Paramètres",
+                "Einstellungen",
+                "Configuración",
+                "Impostazioni"
+            ]
+        );
         let mut keys = BTreeSet::new();
         for line in include_str!("locales.tsv")
             .lines()
@@ -120,6 +155,12 @@ mod tests {
         assert_eq!(settings.concurrency, 3);
         assert_eq!(settings.bandwidth_kib, 128);
         assert!(!settings.close_to_tray);
+        assert_eq!(
+            serde_json::from_str::<crate::model::Settings>(r#"{"language":"unknown"}"#)
+                .unwrap()
+                .language,
+            Language::English
+        );
         for language in Language::ALL {
             let mut updated = settings.clone();
             updated.language = language;
@@ -131,7 +172,7 @@ mod tests {
 
     #[test]
     fn formatting_preserves_user_values_and_unknown_diagnostics() {
-        let value = "a file {with braces}.zip".to_owned();
+        let value = "a file {size}.zip".to_owned();
         assert_eq!(
             Language::French.format(
                 "{size} · Saved to {folder}",

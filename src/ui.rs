@@ -468,18 +468,13 @@ impl App {
     }
 
     fn submit_add(&mut self, snapshot: &Snapshot) {
-        let language = self.applied_language;
         let validation = validate_url(&self.url).and_then(|_| validate_filename(&self.filename));
         if let Err(error) = validation {
-            self.form_error = Some(language.text(&error.to_string()).to_owned());
+            self.form_error = Some(error.to_string());
             return;
         }
         if !PathBuf::from(&self.directory).is_absolute() {
-            self.form_error = Some(
-                language
-                    .text("Enter the full path to an existing folder.")
-                    .into(),
-            );
+            self.form_error = Some("Enter the full path to an existing folder.".into());
             return;
         }
         if self.send(Command::Add {
@@ -1418,7 +1413,7 @@ impl App {
                     small(
                         ui,
                         if snapshot.state.settings.close_to_tray {
-                            language.text("Close to keep downloading in the tray")
+                            language.text("Closes to tray")
                         } else {
                             language.text("Closing exits DownloadManager")
                         },
@@ -1473,10 +1468,21 @@ fn folder_field(
     value: &mut String,
     busy: bool,
 ) -> bool {
+    let browse_width = (ui
+        .painter()
+        .layout_no_wrap(
+            language.text("Browse…").to_owned(),
+            egui::TextStyle::Button.resolve(ui.style()),
+            palette(ui.ctx()).ink,
+        )
+        .size()
+        .x
+        + 2. * ui.spacing().button_padding.x)
+        .max(95.);
     ui.horizontal(|ui| {
         ui.add_sized(
             [
-                (ui.available_width() - 95. - ui.spacing().item_spacing.x).max(80.),
+                (ui.available_width() - browse_width - ui.spacing().item_spacing.x).max(80.),
                 34.,
             ],
             egui::TextEdit::singleline(value)
@@ -1486,7 +1492,7 @@ fn folder_field(
         .on_hover_text(value.as_str());
         ui.add_enabled(
             !busy,
-            egui::Button::new(language.text("Browse…")).min_size(egui::vec2(95., 34.)),
+            egui::Button::new(language.text("Browse…")).min_size(egui::vec2(browse_width, 34.)),
         )
         .on_hover_text(language.text("Choose a folder"))
         .clicked()

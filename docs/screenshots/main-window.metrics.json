@@ -3,26 +3,26 @@
   "frame_count": 3,
   "frames": [
     {
-      "present_ms": 0.521,
-      "raster_ms": 4.8236,
-      "total_ms": 7.517099999999999,
-      "ui_ms": 2.1725
+      "present_ms": 0.5599,
+      "raster_ms": 5.926500000000001,
+      "total_ms": 8.783,
+      "ui_ms": 2.2966
     },
     {
-      "present_ms": 0.45330000000000004,
-      "raster_ms": 0.41209999999999997,
-      "total_ms": 1.008,
-      "ui_ms": 0.1426
+      "present_ms": 0.25880000000000003,
+      "raster_ms": 0.5056,
+      "total_ms": 0.9194,
+      "ui_ms": 0.155
     },
     {
-      "present_ms": 2.5077,
-      "raster_ms": 0.5516,
-      "total_ms": 3.1657,
-      "ui_ms": 0.1064
+      "present_ms": 2.1226000000000003,
+      "raster_ms": 0.43879999999999997,
+      "total_ms": 2.6445000000000003,
+      "ui_ms": 0.08310000000000001
     }
   ],
-  "median_total_ms": 3.1657,
-  "p95_total_ms": 3.1657,
+  "median_total_ms": 2.6445000000000003,
+  "p95_total_ms": 2.6445000000000003,
   "popup_layout": null,
   "renderer": "CPU rasterizer / Win32 GDI",
   "scope": "Native client area; actual presented pixels"

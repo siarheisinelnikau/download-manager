@@ -15,18 +15,19 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 - Review completed downloads separately, open their save folder, and remove history entries while keeping their files. Downloaded files are never automatically opened or executed.
 - Keep transfers running in the tray, with a compact download popup, pause/resume/retry actions and a native context menu. A second launch opens the existing instance.
 - Use one consistent application icon in the EXE, window, interface and tray, with embedded sizes from 16 to 256 pixels.
-- Choose dark or light appearance in Settings. Dark is the default; the saved theme applies to the queue, settings, dialogs and compact popup.
+- Choose English, Русский, Français, Deutsch, Español or Italiano in Settings. Language selection previews immediately; Save changes persists it. Queue, history, forms, tray controls, recovery and update actions are localized; raw technical diagnostics stay available.
+- Choose dark or light appearance in Settings. Dark is the default; the saved theme applies to the queue, settings, dialogs and compact popup. English is the complete fallback for older settings.
 - Check for stable GitHub releases manually or on startup (enabled by default, persistent opt-out). User-initiated installation verifies SHA-256 and stages a Windows x64 portable update before closing/restarting the application.
 
 There is one connection per download. Parallel segments, browser integration, authentication/cookie management, site extraction and scheduled downloads are outside this version.
 
 ## Use
 
-1. Start `DownloadManager-v0.2.0.exe` on Windows x64.
+1. Start `DownloadManager-v0.3.0.exe` on Windows x64.
 2. Select **New download** (Ctrl+N). Paste a URL, select **Browse…** to choose a folder (or enter its path), and choose a filename. Select **Download** or press Enter from a form field. Invalid input stays in the form so you can correct it.
 3. Use **Pause**, **Resume**, or **Retry** on a row. The **•••** menu contains the save location, queue reordering and **Cancel download**. Cancel preserves partial data.
 4. If the server cannot safely resume, choose **••• → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.
-5. Open **Settings** using the gear in the upper right to change download defaults and limits, choose **Dark** or **Light** from the **Theme** list, disable startup checks or check/install an update. **Browse…** also chooses the default download folder. Theme selection previews immediately; **Save changes** keeps it across restarts. The **back arrow** returns to the queue and discards unsaved appearance changes.
+5. Open **Settings** using the gear in the upper right to change download defaults and limits, choose your **Language** by its native name and **Dark** or **Light** from the **Theme** list, disable startup checks or check/install an update. **Browse…** also chooses the default download folder. Language and theme selection preview immediately; **Save changes** keeps it across restarts. The **back arrow** returns to the queue and discards unsaved appearance changes.
 
 By default, closing the window keeps downloads running in the tray. Single-click the tray icon to show or hide a compact list of up to four unfinished downloads; **Open downloads** opens the full queue. Double-click opens the queue directly. Right-click opens **New download**, **Pause all**, **Resume paused**, **Settings** and **Quit DownloadManager**. The **×** button, Escape or clicking outside dismisses the popup. Settings and Quit are available from the tray context menu; the popup keeps only quick download actions. Disable **Keep running when closed** in Settings to exit on close instead. If Windows refuses tray registration, the application stays accessible in its regular window and closing exits.
 
@@ -46,7 +47,7 @@ Normal TLS certificate/hostname verification remains enabled. HTTPS transfers ca
 
 Default state location: `%LOCALAPPDATA%\DownloadManager\state.json`. Set `DOWNLOAD_MANAGER_DATA_DIR` to an absolute isolated directory for development. One instance may own a data directory at a time; another launch signals that instance through Windows named events rather than starting a second queue. URLs and paths are stored locally in plain JSON; URL query strings can contain private tokens. Credentials embedded in URLs are rejected.
 
-Canonical future repository: [siarheisinelnikau/download-manager](https://github.com/siarheisinelnikau/download-manager). It was not created, queried for releases or published during development. A missing repository/release is reported as unavailable, not up to date. Startup no-update results and transient check errors stay in settings without modal dialogs.
+Canonical repository: [siarheisinelnikau/download-manager](https://github.com/siarheisinelnikau/download-manager). A missing repository/release is reported as unavailable, not up to date. Startup no-update results and transient check errors stay in settings without modal dialogs.
 
 Installation supports the single Windows x64 asset `DownloadManager-vVERSION.exe`. It requires the GitHub SHA-256 asset digest or a matching `SHA256SUMS.txt` entry. The helper waits for the application to exit, creates a backup beside the installed EXE, replaces it and relaunches it. Settings, queue and download data remain in their existing locations. The installed EXE keeps its current filename after an in-place update. No administrator prompt or unattended install is used. Read-only installation folders produce an error and require moving the portable app to a writable folder.
 
@@ -56,7 +57,7 @@ The shared `rust-auto-updator` core owns release checks, verified downloads and 
 
 Source builds require the sibling `../rust-auto-updator/crates/rust-auto-updator` workspace. The reusable core is currently a local dependency; standalone CI must provision both checkouts before building. No registry/GitHub publication is implied.
 
-Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visual Studio C++ build tools and Windows SDK. The GUI uses egui 0.33.3 with CPU rasterization and Win32 GDI presentation; the executable has no OpenGL/DirectX rendering dependency. Windows 10/11 x64 is the intended target, with broader interactive compatibility still pending. Other OS/architecture builds are not release targets for v0.2.0.
+Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visual Studio C++ build tools and Windows SDK. The GUI uses egui 0.33.3 with CPU rasterization and Win32 GDI presentation; the executable has no OpenGL/DirectX rendering dependency. Windows 10/11 x64 is the intended target, with broader interactive compatibility still pending. Other OS/architecture builds are not release targets for v0.3.0.
 
 ```powershell
 ./scripts/check.ps1 -Offline
@@ -65,17 +66,17 @@ Required: Windows x64, Rust **1.95+**, the `x86_64-pc-windows-msvc` target, Visu
 ./scripts/package.ps1 -Offline
 ```
 
-Omit `-Offline` when dependency downloads are needed. All Cargo commands use two jobs and a repository-local `target`. The package script builds the MSVC target with a static CRT and prepares `dist/DownloadManager-v0.2.0.exe`, `SHA256SUMS.txt`, license notices and release notes. It does not run the GUI, run the updater or publish anything. The CI workflow performs checks including synthetic loopback tests and uploads a build artifact, without creating releases.
+Omit `-Offline` when dependency downloads are needed. All Cargo commands use two jobs and a repository-local `target`. The package script builds the MSVC target with a static CRT and prepares `dist/DownloadManager-v0.3.0.exe`, `SHA256SUMS.txt`, license notices and release notes. It does not run the GUI, run the updater or publish anything. The CI workflow performs checks including synthetic loopback tests and uploads a build artifact, without creating releases.
 
 `Cargo.toml` is the version source for the UI, Windows file/product properties and executable naming. Changed executables receive a new version before delivery; ordinary local recompilations do not. The inspection script checks that the packaged Windows version matches the manifest. Build notes identify the changes since the preceding shared build even before public releases exist.
 
-See [architecture](docs/ARCHITECTURE.md), [verification](docs/VERIFICATION.md) and the [initial release-note draft](docs/RELEASE_NOTES.md).
+See [localization verification](docs/verification/localization-v0.3.0.md), [architecture](docs/ARCHITECTURE.md), [verification](docs/VERIFICATION.md) and the [current release notes](docs/RELEASE_NOTES.md).
 
 ## Screenshots and validation status
 
-These are actual client-area bitmaps presented by the packaged Windows application. The queue and new-download views are 960×680 logical pixels, settings are 620×500, and the populated popup is 400×372. The empty popup is 400×256, including its full footer and bottom inset. The queue/history use synthetic paused/error/completed fixtures; no Internet transfer is implied. The isolated settings fixture disables startup checking; new installations enable it by default.
+These are actual client-area bitmaps presented by the packaged Windows application. The queue and new-download views are 960×680 logical pixels, settings are 620×560, and the populated popup is 400×372. The empty popup is 400×256, including its full footer and bottom inset. The queue/history use synthetic paused/error/completed fixtures; no Internet transfer is implied. The isolated settings fixture disables startup checking; new installations enable it by default.
 
-The interface uses a restrained charcoal or light-gray palette, one blue accent, the Windows Segoe UI typeface when installed, and shared spacing and control styles. File rows keep their status and primary action together; errors show a reason and expandable recovery options. Settings use three compact groups and one theme dropdown. Completed files have an explicit Open folder action; downloads are never executed.
+The interface uses a restrained charcoal or light-gray palette, one blue accent, the Windows Segoe UI typeface when installed, and shared spacing and control styles. File rows keep their status and primary action together; errors show a reason and expandable recovery options. Settings use three compact groups with adjacent language and theme controls. Completed files have an explicit Open folder action; downloads are never executed.
 
 Dark is used for new installations and existing settings without a theme preference. Selecting and saving Light preserves that choice across restarts.
 
@@ -117,20 +118,37 @@ Dark is used for new installations and existing settings without a theme prefere
 
 </details>
 
+<details>
+<summary>Localized interfaces</summary>
+
+![Russian queue and recovery message in the dark theme](docs/screenshots/main-window-ru.png)
+
+![German language and theme controls at the minimum settings size](docs/screenshots/settings-de-light.png)
+
+![French new-download form in the light theme](docs/screenshots/new-download-fr-light.png)
+
+![Spanish compact tray popup in the dark theme](docs/screenshots/tray-popup-es.png)
+
+![Italian queue in the light theme at the minimum main-window size](docs/screenshots/main-window-it-light.png)
+
+</details>
+
 ![Application icon used by the EXE, window and tray](docs/screenshots/application-icon.png)
 
-The empty queue and the minimum 560×440 settings layout were also reviewed. Settings opened from the tray appear beside its icon on the same monitor. Settings resize to a compact window; returning to Downloads restores the queue geometry. All basic settings fit at 620×500. The save action stays visible while smaller settings windows scroll.
+The empty queue and the minimum 560×440 settings layout were also reviewed. The default settings height is 560 pixels so Language, Theme and startup-update controls fit together. Settings opened from the tray appear beside its icon on the same monitor. Settings resize to a compact window; returning to Downloads restores the queue geometry. Settings scroll at compact sizes while keeping Save changes visible. The save action stays visible while smaller settings windows scroll.
 
 ```powershell
 ./scripts/review-ui.ps1            # Bounded native render-save-exit captures
 ./scripts/review-ui.ps1 -Diagnose  # Isolated visible/hidden/restore measurements
 ./scripts/review-ui.ps1 -Theme Light
 ./scripts/review-ui.ps1 -Diagnose -Theme Light -SkipTray
+./scripts/review-localization.ps1           # Real six-language representative captures
+./scripts/review-localization.ps1 -Diagnose # Russian dark / German light lifecycle measurements
 ```
 
 Captures save a complete PNG and exit after readiness and two real frames, with a five-second internal deadline and an eight-second external timeout. They use the same UI and CPU/GDI renderer as normal operation. This verifies the client area, not OS chrome, mouse/keyboard navigation or clipboard behavior. No Computer Use is required. Runtime diagnostics separately count actual layouts, rasters and presentations; screenshots alone do not certify idle behavior.
 
-All 26 current-checkout offline tests pass, including saved-theme persistence, migration of older settings to the dark default, and focused-switch keyboard activation and disabled-state behavior in the real egui component. Windows decodes the packaged EXE icon at all seven sizes. Bounded idle/hidden/restore measurements are recorded in [VERIFICATION.md](docs/VERIFICATION.md). The earlier native tray test was denied with Windows error 5, so actual Shell placement and tray mouse/menu gestures remain unverified; `-SkipTray` explicitly omits that separate test when reviewing themes. Outgoing loopback requests remain blocked with socket error 10013. Disk-full, power-loss, actual input/clipboard interaction and updater installation still require separate validation.
+All 38 current-checkout synthetic and loopback tests pass, including saved-theme persistence, migration of older settings to the dark default, and focused-switch keyboard activation and disabled-state behavior in the real egui component. Windows decodes the packaged EXE icon at all seven sizes. Bounded idle/hidden/restore measurements are recorded in [VERIFICATION.md](docs/VERIFICATION.md). The earlier native tray test was denied with Windows error 5, so actual Shell placement and tray mouse/menu gestures remain unverified; `-SkipTray` explicitly omits that separate test when reviewing themes. Disk-full, power-loss, actual input/clipboard interaction and updater installation still require separate validation.
 
 ## License
 
