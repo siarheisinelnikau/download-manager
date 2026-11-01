@@ -130,8 +130,9 @@ mod tests {
         for size in [16, 20, 24, 32, 48, 64, 256] {
             let pixels = rgba(size);
             assert_eq!(pixels.len(), (size * size * 4) as usize);
-            assert!(pixels.chunks_exact(4).any(|p| p == [255, 255, 255, 255]));
-            assert!(pixels.chunks_exact(4).any(|p| p == [33, 99, 209, 255]));
+            let (rgba_pixels, _) = pixels.as_chunks::<4>();
+            assert!(rgba_pixels.contains(&[255, 255, 255, 255]));
+            assert!(rgba_pixels.contains(&[33, 99, 209, 255]));
             assert_eq!(pixels[3], 0);
         }
         let bytes = ico();
