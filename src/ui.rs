@@ -158,7 +158,7 @@ impl App {
             .frame(
                 egui::Frame::new()
                     .fill(colors.surface)
-                    .stroke(Stroke::new(1., colors.border))
+                    .stroke(Stroke::new(1.0_f32, colors.border))
                     .inner_margin(16.),
             )
             .show(ctx, |ui| {
@@ -311,7 +311,7 @@ impl App {
                     footer_rect,
                     egui::Button::new(title(language.text("Open downloads"), 14.))
                         .fill(colors.hover)
-                        .stroke(Stroke::new(1., colors.border))
+                        .stroke(Stroke::new(1.0_f32, colors.border))
                         .corner_radius(7.),
                 );
                 self.popup_bounds = Some((bounds, footer.rect));
@@ -526,7 +526,7 @@ impl App {
             && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter));
         let frame = egui::Frame::new()
             .fill(colors.surface)
-            .stroke(Stroke::new(1., colors.border))
+            .stroke(Stroke::new(1.0_f32, colors.border))
             .corner_radius(12.)
             .inner_margin(24.);
         let modal = egui::Modal::new(egui::Id::new("new_download"))
@@ -1358,7 +1358,7 @@ impl App {
                                 egui::Frame::new()
                                     .fill(colors.surface)
                                     .corner_radius(10.)
-                                    .stroke(Stroke::new(1., colors.border))
+                                    .stroke(Stroke::new(1.0_f32, colors.border))
                                     .show(ui, |ui| {
                                         ui.set_width(ui.available_width());
                                         ui.spacing_mut().item_spacing.y = 0.;
@@ -1379,7 +1379,7 @@ impl App {
                 );
                 footer.painter().line_segment(
                     [footer_rect.left_top(), footer_rect.right_top()],
-                    Stroke::new(1., colors.border),
+                    Stroke::new(1.0_f32, colors.border),
                 );
                 let failures = snapshot
                     .state
@@ -1423,7 +1423,7 @@ impl App {
         self.add_dialog(ctx, &snapshot);
         if let Some(id) = self.restart {
             let modal = egui::Modal::new(egui::Id::new("restart_download"))
-                .frame(egui::Frame::new().fill(colors.surface).inner_margin(24.).corner_radius(12.).stroke(Stroke::new(1., colors.border)))
+                .frame(egui::Frame::new().fill(colors.surface).inner_margin(24.).corner_radius(12.).stroke(Stroke::new(1.0_f32, colors.border)))
                 .show(ctx, |ui| {
                     ui.set_max_width(420.);
                     ui.label(title(language.text("Restart this download?"), 22.));
@@ -1521,7 +1521,7 @@ fn settings_group(ui: &mut egui::Ui, label: &str, contents: impl FnOnce(&mut egu
     ui.add_space(1.);
     egui::Frame::new()
         .fill(palette(ui.ctx()).surface)
-        .stroke(Stroke::new(1., palette(ui.ctx()).border))
+        .stroke(Stroke::new(1.0_f32, palette(ui.ctx()).border))
         .corner_radius(8.)
         .inner_margin(egui::Margin::symmetric(12, 6))
         .show(ui, |ui| {

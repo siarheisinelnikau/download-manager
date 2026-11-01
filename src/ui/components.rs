@@ -16,7 +16,7 @@ pub fn glyph(ui: &Ui, rect: egui::Rect, icon: Glyph, color: Color32) {
     let p = ui.painter();
     let c = rect.center();
     let at = |x, y| c + egui::vec2(x, y) * (rect.width() / 24.);
-    let stroke = Stroke::new(1.6, color);
+    let stroke = Stroke::new(1.6_f32, color);
     let line = |a: (f32, f32), b: (f32, f32)| {
         p.line_segment([at(a.0, a.1), at(b.0, b.1)], stroke);
     };
@@ -71,8 +71,12 @@ pub fn icon_button(ui: &mut Ui, icon: Glyph, label: &str) -> Response {
     if response.hovered() || response.has_focus() {
         ui.painter().rect_filled(rect, 7., colors.hover);
         if response.has_focus() {
-            ui.painter()
-                .rect_stroke(rect, 7., Stroke::new(1., colors.accent), StrokeKind::Inside);
+            ui.painter().rect_stroke(
+                rect,
+                7.,
+                Stroke::new(1.0_f32, colors.accent),
+                StrokeKind::Inside,
+            );
         }
     }
     glyph(
@@ -94,7 +98,7 @@ pub fn file_icon(ui: &mut Ui, filename: &str, size: f32) {
     let c = rect.center();
     let s = size / 44.;
     let at = |x, y| c + egui::vec2(x, y) * s;
-    let stroke = Stroke::new(1.3, colors.accent);
+    let stroke = Stroke::new(1.3_f32, colors.accent);
     ui.painter().add(egui::Shape::line(
         vec![
             at(-9., -13.),
@@ -170,7 +174,7 @@ pub fn tab(ui: &mut Ui, label: &str, count: usize, selected: bool) -> Response {
                 Pos2::new(r.left() + 10., r.bottom()),
                 Pos2::new(r.right() - 10., r.bottom()),
             ],
-            Stroke::new(2., colors.accent),
+            Stroke::new(2.0_f32, colors.accent),
         );
     }
     response.widget_info(|| {
@@ -212,7 +216,7 @@ pub fn switch(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
         ui.painter().rect_stroke(
             rect.expand(3.),
             12.,
-            Stroke::new(1., colors.accent),
+            Stroke::new(1.0_f32, colors.accent),
             StrokeKind::Inside,
         );
     }
