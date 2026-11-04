@@ -598,7 +598,7 @@ impl CpuHost {
         let (Some(window), Some(anchor)) = (&self.window, self.popup_anchor) else {
             return;
         };
-        let work = crate::tray::work_area(anchor).unwrap_or((0., 0., 1920., 1080.));
+        let work = Self::popup_work_area(window, anchor);
         let scale = window.scale_factor();
         let wanted = self.app.as_ref().unwrap().popup_size();
         let width = (wanted.0 as f64)
@@ -618,73 +618,108 @@ impl CpuHost {
             window.set_outer_position(position);
         }
     }
+    fn popup_work_area(window: &Window, anchor: (f64, f64)) -> (f64, f64, f64, f64) {
+        crate::tray::work_area(anchor)
+            .or_else(|| {
+                window.available_monitors().find_map(|monitor| {
+                    let position = monitor.position();
+                    let size = monitor.size();
+                    let left = position.x as f64;
+                    let top = position.y as f64;
+                    let right = left + size.width as f64;
+                    let bottom = top + size.height as f64;
+                    (anchor.0 >= left && anchor.0 < right && anchor.1 >= top && anchor.1 < bottom)
+                        .then_some((left, top, right, bottom))
+                })
+            })
+            .unwrap_or((0., 0., 1920., 1080.))
+    }
+    fn toggle_popup(&mut self, anchor: (f64, f64)) {
+        // Windows can dismiss the popup on focus loss before delivering the icon's mouse-up.
+        if self.popup
+            && self.hidden()
+            && self
+                .last_popup_dismissed
+                .take()
+                .is_some_and(|at| at.elapsed() < Duration::from_millis(200))
+        {
+            return;
+        }
+        if self.popup
+            && self
+                .window
+                .as_ref()
+                .is_some_and(|w| w.is_visible() == Some(true))
+        {
+            self.hide_to_tray();
+            return;
+        }
+        let Some(window) = &self.window else {
+            return;
+        };
+        if !self.popup && self.full_geometry.is_none() {
+            let mut size = window.inner_size();
+            if size.width < 760 || size.height < 540 {
+                size = winit::dpi::PhysicalSize::new(960, 680);
+            }
+            self.full_geometry = Some((window.outer_position().ok(), size, window.is_maximized()));
+        }
+        self.popup = true;
+        self.settings_compact = false;
+        self.popup_focused = false;
+        self.popup_anchor = Some(anchor);
+        window.set_maximized(false);
+        window.set_minimized(false);
+        window.set_min_inner_size(None::<LogicalSize<u32>>);
+        window.set_decorations(false);
+        window.set_resizable(false);
+        window.set_window_level(winit::window::WindowLevel::AlwaysOnTop);
+        #[cfg(windows)]
+        {
+            use winit::platform::windows::WindowExtWindows;
+            window.set_skip_taskbar(true);
+        }
+        let (width, height) = self.app.as_ref().unwrap().popup_size();
+        let work = Self::popup_work_area(window, anchor);
+        let scale = window.scale_factor();
+        let width = (width as f64)
+            .min((work.2 - work.0 - 16.) / scale)
+            .max(240.);
+        let height = (height as f64)
+            .min((work.3 - work.1 - 16.) / scale)
+            .max(220.);
+        let _ = window.request_inner_size(LogicalSize::new(width, height));
+        window.set_visible(true);
+        self.place_popup();
+        if self.diagnostic.is_none() {
+            window.focus_window();
+        }
+        self.occluded = false;
+        self.ctx.memory_mut(|m| m.reset_areas());
+        self.schedule(Instant::now());
+    }
     fn dispatch_tray(&mut self, event_loop: &ActiveEventLoop, command: crate::tray::Command) {
         use crate::tray::Command as T;
         match command {
-            T::Popup { x, y } => {
-                // Windows can dismiss the popup on focus loss before delivering the icon's mouse-up.
-                if self.popup
-                    && self.hidden()
-                    && self
-                        .last_popup_dismissed
-                        .take()
-                        .is_some_and(|at| at.elapsed() < Duration::from_millis(200))
-                {
-                    return;
-                }
-                if self.popup
-                    && self
-                        .window
-                        .as_ref()
-                        .is_some_and(|w| w.is_visible() == Some(true))
-                {
-                    self.hide_to_tray();
-                    return;
-                }
-                let Some(window) = &self.window else {
-                    return;
-                };
-                if !self.popup && self.full_geometry.is_none() {
-                    let mut size = window.inner_size();
-                    if size.width < 760 || size.height < 540 {
-                        size = winit::dpi::PhysicalSize::new(960, 680);
-                    }
-                    self.full_geometry =
-                        Some((window.outer_position().ok(), size, window.is_maximized()));
-                }
-                self.popup = true;
-                self.settings_compact = false;
-                self.popup_focused = false;
-                self.popup_anchor = Some((x, y));
-                window.set_maximized(false);
-                window.set_minimized(false);
-                window.set_min_inner_size(None::<LogicalSize<u32>>);
-                window.set_decorations(false);
-                window.set_resizable(false);
-                window.set_window_level(winit::window::WindowLevel::AlwaysOnTop);
-                #[cfg(windows)]
-                {
-                    use winit::platform::windows::WindowExtWindows;
-                    window.set_skip_taskbar(true);
-                }
-                let (width, height) = self.app.as_ref().unwrap().popup_size();
-                let work = crate::tray::work_area((x, y)).unwrap_or((0., 0., 1920., 1080.));
-                let scale = window.scale_factor();
-                let width = (width as f64)
-                    .min((work.2 - work.0 - 16.) / scale)
-                    .max(240.);
-                let height = (height as f64)
-                    .min((work.3 - work.1 - 16.) / scale)
-                    .max(220.);
-                let _ = window.request_inner_size(LogicalSize::new(width, height));
-                window.set_visible(true);
-                self.place_popup();
-                if self.diagnostic.is_none() {
-                    window.focus_window();
-                }
-                self.occluded = false;
-                self.ctx.memory_mut(|m| m.reset_areas());
-                self.schedule(Instant::now());
+            T::Popup { x, y } => self.toggle_popup((x, y)),
+            #[cfg(target_os = "linux")]
+            T::QuickDownloads => {
+                let anchor = self
+                    .window
+                    .as_ref()
+                    .and_then(|window| {
+                        window
+                            .current_monitor()
+                            .or_else(|| window.primary_monitor())
+                    })
+                    .map_or((1000., 0.), |monitor| {
+                        let position = monitor.position();
+                        (
+                            position.x as f64 + monitor.size().width as f64 - 18.,
+                            position.y as f64,
+                        )
+                    });
+                self.toggle_popup(anchor);
             }
             T::Queue => {
                 self.app.as_mut().unwrap().show_queue();
@@ -939,8 +974,14 @@ impl CpuHost {
             if self.app.as_mut().unwrap().request_close() {
                 event_loop.exit();
             }
-        } else if let Some(when) = Instant::now().checked_add(repaint) {
-            self.schedule(when);
+        } else {
+            if let Some(when) = Instant::now().checked_add(repaint) {
+                self.schedule(when);
+            }
+            if self.app.as_ref().unwrap().transfer_animating() {
+                const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
+                self.schedule((start + FRAME_INTERVAL).max(Instant::now()));
+            }
         }
         if let Some(action) = popup_action {
             self.dispatch_tray(event_loop, action);

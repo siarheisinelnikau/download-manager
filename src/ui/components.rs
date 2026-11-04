@@ -145,7 +145,7 @@ pub fn badge(ui: &mut Ui, text: &str, foreground: Color32, background: Color32) 
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), text));
 }
 
-pub fn speed_chart(ui: &mut Ui, history: Option<&SpeedHistory>) -> Response {
+pub fn speed_chart(ui: &mut Ui, history: Option<&SpeedHistory>, current_speed: f32) -> Response {
     let colors = palette(ui.ctx());
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.), Sense::hover());
@@ -165,11 +165,12 @@ pub fn speed_chart(ui: &mut Ui, history: Option<&SpeedHistory>) -> Response {
         let peak = history
             .iter()
             .map(|&(_, speed)| speed)
-            .fold(1_f32, f32::max)
+            .fold(current_speed.max(1.), f32::max)
             * 1.15;
         let points: Vec<_> = history
             .iter()
             .map(|&(time, speed)| {
+                let speed = if time == last { current_speed } else { speed };
                 let x = 1.
                     - last.duration_since(time).as_secs_f32() / SPEED_HISTORY_WINDOW.as_secs_f32();
                 Pos2::new(
