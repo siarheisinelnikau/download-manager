@@ -83,22 +83,23 @@ enum Event {
 
 pub struct Manager {
     tx: SyncSender<Event>,
-    snapshot: Arc<Mutex<Snapshot>>,
+    snapshot: Arc<Mutex<Arc<Snapshot>>>,
 }
 
 impl Manager {
     pub fn start(directory: PathBuf, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
         let (tx, rx) = mpsc::sync_channel(64);
-        let snapshot = Arc::new(Mutex::new(Snapshot::default()));
+        let snapshot = Arc::new(Mutex::new(Arc::new(Snapshot::default())));
         let shared = snapshot.clone();
         let sender = tx.clone();
         thread::spawn(move || {
             if let Err(error) = supervise(directory, sender, rx, shared.clone(), wake.clone()) {
-                let mut snapshot = shared.lock().unwrap();
+                let mut guard = shared.lock().unwrap();
+                let snapshot = Arc::make_mut(&mut guard);
                 snapshot.fatal = Some(format!("{error:#}"));
                 snapshot.ready = false;
                 snapshot.stopped = true;
-                drop(snapshot);
+                drop(guard);
                 wake();
             }
         });
@@ -106,6 +107,10 @@ impl Manager {
     }
 
     pub fn snapshot(&self) -> Snapshot {
+        self.shared_snapshot().as_ref().clone()
+    }
+
+    pub fn shared_snapshot(&self) -> Arc<Snapshot> {
         self.snapshot.lock().unwrap().clone()
     }
 
@@ -116,8 +121,9 @@ impl Manager {
     }
 }
 
-fn publish(snapshot: &Snapshot, shared: &Mutex<Snapshot>, wake: &dyn Fn()) {
-    *shared.lock().unwrap() = snapshot.clone();
+fn publish(snapshot: &Snapshot, shared: &Mutex<Arc<Snapshot>>, wake: &dyn Fn()) {
+    let published = Arc::new(snapshot.clone());
+    *shared.lock().unwrap() = published;
     wake();
 }
 
@@ -137,7 +143,7 @@ fn supervise(
     directory: PathBuf,
     tx: SyncSender<Event>,
     rx: mpsc::Receiver<Event>,
-    shared: Arc<Mutex<Snapshot>>,
+    shared: Arc<Mutex<Arc<Snapshot>>>,
     wake: Arc<dyn Fn() + Send + Sync>,
 ) -> Result<()> {
     fs::create_dir_all(&directory).context("Cannot create application data folder")?;

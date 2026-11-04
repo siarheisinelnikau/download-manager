@@ -7,6 +7,8 @@ pub enum Command {
         x: f64,
         y: f64,
     },
+    #[cfg(target_os = "linux")]
+    QuickDownloads,
     Queue,
     NewDownload,
     Settings,
@@ -70,6 +72,8 @@ pub struct NativeTray {
     resume: tray_icon::menu::MenuItem,
     new: tray_icon::menu::MenuItem,
     last_enabled: Option<(bool, bool, bool)>,
+    #[cfg(target_os = "linux")]
+    quick: tray_icon::menu::MenuItem,
     open: tray_icon::menu::MenuItem,
     settings: tray_icon::menu::MenuItem,
     quit: tray_icon::menu::MenuItem,
@@ -89,6 +93,10 @@ impl NativeTray {
         };
         let alive = Arc::new(AtomicBool::new(true));
         let menu = Menu::new();
+        #[cfg(target_os = "linux")]
+        let quick = MenuItem::with_id("quick", "Quick download view", true, None);
+        #[cfg(target_os = "linux")]
+        menu.append(&quick)?;
         let open = MenuItem::with_id("queue", "Show downloads", true, None);
         let new = MenuItem::with_id("new", "New download", true, None);
         let pause = MenuItem::with_id("pause", "Pause all", true, None);
@@ -176,6 +184,8 @@ impl NativeTray {
                 return;
             }
             let command = match event.id.0.as_str() {
+                #[cfg(target_os = "linux")]
+                "quick" => Command::QuickDownloads,
                 "queue" => Command::Queue,
                 "new" => Command::NewDownload,
                 "pause" => Command::PauseAll,
@@ -195,6 +205,8 @@ impl NativeTray {
             resume,
             new,
             last_enabled: None,
+            #[cfg(target_os = "linux")]
+            quick,
             open,
             settings,
             quit,
@@ -203,6 +215,8 @@ impl NativeTray {
     }
     fn update_menu(&mut self, language: Language, enabled: (bool, bool, bool)) {
         if self.language != Some(language) {
+            #[cfg(target_os = "linux")]
+            self.quick.set_text(language.text("Quick download view"));
             self.open.set_text(language.text("Show downloads"));
             self.new.set_text(language.text("New download"));
             self.pause.set_text(language.text("Pause all"));

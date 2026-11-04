@@ -43,12 +43,13 @@ jobs:
           cargo test --locked --all-targets --features loopback-tests -- --test-threads=2
       - name: Build Ubuntu amd64 package
         run: ./scripts/package-ubuntu.sh
-      - name: Render a bounded Ubuntu settings frame
+      - name: Install the Ubuntu package and render a settings frame
         run: |
+          sudo apt-get install -y --no-remove --no-install-recommends ./dist/*.deb
           export DOWNLOAD_MANAGER_DATA_DIR="$PWD/.local/gui-smoke"
           mkdir -p "$DOWNLOAD_MANAGER_DATA_DIR"
           printf '%s\n' '{"schema":1,"next_id":1,"settings":{"startup_update_check":false},"downloads":[]}' > "$DOWNLOAD_MANAGER_DATA_DIR/state.json"
-          xvfb-run -a timeout 10s target/x86_64-unknown-linux-gnu/release/download-manager \
+          xvfb-run -a timeout 10s /usr/bin/download-manager \
             --capture-ui settings "$DOWNLOAD_MANAGER_DATA_DIR/settings.png"
           test -s "$DOWNLOAD_MANAGER_DATA_DIR/settings.png"
       - uses: actions/upload-artifact@v4

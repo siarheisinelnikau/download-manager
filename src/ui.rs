@@ -1,4 +1,6 @@
 mod components;
+mod transfer_motion;
+
 use crate::folder_picker::{Request as FolderRequest, Target as FolderTarget};
 use crate::theme::{self, palette, title};
 use components::{Glyph, badge, file_icon, glyph, icon_button, progress, speed_chart, switch, tab};
@@ -14,8 +16,11 @@ use download_manager::{
 };
 use egui::{Color32, RichText, Stroke, Vec2};
 use std::{path::PathBuf, sync::Arc};
+use transfer_motion::{Motion, Reading};
 
 pub struct App {
+    transfer_motion: std::collections::HashMap<u64, Motion>,
+    transfer_animating: bool,
     popup_bounds: Option<(egui::Rect, egui::Rect)>,
     icon: egui::TextureHandle,
     applied_theme: Theme,
@@ -58,6 +63,8 @@ impl App {
         };
         Self {
             popup_bounds: None,
+            transfer_motion: Default::default(),
+            transfer_animating: false,
             icon,
             applied_theme: Theme::Dark,
             applied_language: Language::English,
@@ -99,13 +106,15 @@ impl App {
     }
 
     pub fn ready(&self) -> bool {
-        self.manager.as_ref().is_some_and(|m| m.snapshot().ready)
-    }
-
-    pub fn snapshot(&self) -> Snapshot {
         self.manager
             .as_ref()
-            .map(Manager::snapshot)
+            .is_some_and(|m| m.shared_snapshot().ready)
+    }
+
+    pub fn snapshot(&self) -> Arc<Snapshot> {
+        self.manager
+            .as_ref()
+            .map(Manager::shared_snapshot)
             .unwrap_or_default()
     }
     pub fn show_queue(&mut self) {
@@ -147,9 +156,38 @@ impl App {
         self.popup_bounds
     }
 
+    pub fn transfer_animating(&self) -> bool {
+        self.transfer_animating
+    }
+
+    fn begin_transfer_frame(&mut self, snapshot: &Snapshot) {
+        self.transfer_animating = false;
+        self.transfer_motion
+            .retain(|id, _| snapshot.speed_history.contains_key(id));
+    }
+
+    fn transfer_reading(&mut self, job: &Download) -> Reading {
+        let reported = Reading {
+            bytes: job.bytes,
+            speed: job.speed,
+        };
+        if job.status != Status::Downloading {
+            return reported;
+        }
+        let now = std::time::Instant::now();
+        let motion = self
+            .transfer_motion
+            .entry(job.id)
+            .or_insert_with(|| Motion::new(reported, now));
+        let (visible, animating) = motion.update(reported, now);
+        self.transfer_animating |= animating;
+        visible
+    }
+
     pub fn popup(&mut self, ctx: &egui::Context) -> Option<crate::tray::Command> {
         self.popup_bounds = None;
         let snapshot = self.snapshot();
+        self.begin_transfer_frame(&snapshot);
         self.sync_theme(ctx, &snapshot);
         let language = self.applied_language;
         let colors = palette(ctx);
@@ -244,6 +282,7 @@ impl App {
                             });
                         }
                         for (index, job) in jobs.iter().take(4).enumerate() {
+                            let reading = self.transfer_reading(job);
                             ui.add_space(8.);
                             let filename = job
                                 .destination
@@ -265,7 +304,7 @@ impl App {
                                             status_label(job.status, colors, language);
                                         ui.label(
                                             RichText::new(if job.status == Status::Downloading {
-                                                format!("{}/s", bytes(job.speed.max(0.) as u64))
+                                                format!("{}/s", bytes(reading.speed.max(0.) as u64))
                                             } else {
                                                 label.into()
                                             })
@@ -287,7 +326,7 @@ impl App {
                             });
                             progress(
                                 ui,
-                                fraction(job),
+                                fraction(job, reading.bytes),
                                 if job.status == Status::Failed {
                                     colors.error
                                 } else {
@@ -298,7 +337,7 @@ impl App {
                                 ui,
                                 &format!(
                                     "{} / {}",
-                                    bytes(job.bytes),
+                                    bytes(reading.bytes),
                                     job.total
                                         .map(bytes)
                                         .unwrap_or_else(|| language.text("Unknown size").into())
@@ -328,7 +367,7 @@ impl App {
     pub fn open_settings(&mut self) {
         self.folder_generation = self.folder_generation.wrapping_add(1);
         if let Some(manager) = &self.manager {
-            self.settings = manager.snapshot().state.settings;
+            self.settings = manager.shared_snapshot().state.settings.clone();
             self.settings_directory = self.settings.default_directory.display().to_string();
             self.settings_open = true;
             self.saved_settings = false;
@@ -437,7 +476,7 @@ impl App {
 
     pub fn finished(&self) -> bool {
         self.manager.as_ref().is_some_and(|m| {
-            let s = m.snapshot();
+            let s = m.shared_snapshot();
             s.stopped && s.fatal.is_none()
         })
     }
@@ -446,7 +485,7 @@ impl App {
         let Some(manager) = &self.manager else {
             return true;
         };
-        let snapshot = manager.snapshot();
+        let snapshot = manager.shared_snapshot();
         if snapshot.fatal.is_some() || snapshot.stopped {
             return true;
         }
@@ -891,6 +930,7 @@ impl App {
     }
 
     fn download_row(&mut self, ui: &mut egui::Ui, job: &Download, history: Option<&SpeedHistory>) {
+        let reading = self.transfer_reading(job);
         let language = self.applied_language;
         let colors = palette(ui.ctx());
         let filename = job
@@ -968,7 +1008,7 @@ impl App {
             if job.status != Status::Completed {
                 progress(
                     ui,
-                    fraction(job),
+                    fraction(job, reading.bytes),
                     match job.status {
                         Status::Completed => colors.success,
                         Status::Failed => colors.error,
@@ -984,7 +1024,7 @@ impl App {
                         language.format(
                             "{size} · Saved to {folder}",
                             &[
-                                ("size", bytes(job.bytes)),
+                                ("size", bytes(reading.bytes)),
                                 (
                                     "folder",
                                     job.destination
@@ -999,7 +1039,7 @@ impl App {
                     } else {
                         format!(
                             "{} / {}",
-                            bytes(job.bytes),
+                            bytes(reading.bytes),
                             job.total
                                 .map(bytes)
                                 .unwrap_or_else(|| language.text("Unknown size").into())
@@ -1008,7 +1048,7 @@ impl App {
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if job.status == Status::Downloading {
-                        if let Some(total) = job.total.filter(|_| job.speed > 0.) {
+                        if let Some(total) = job.total.filter(|_| reading.speed > 0.) {
                             small(
                                 ui,
                                 &language.format(
@@ -1016,7 +1056,8 @@ impl App {
                                     &[(
                                         "time",
                                         duration(
-                                            total.saturating_sub(job.bytes) as f64 / job.speed,
+                                            total.saturating_sub(reading.bytes) as f64
+                                                / reading.speed,
                                             language,
                                         ),
                                     )],
@@ -1024,16 +1065,16 @@ impl App {
                             );
                         }
                         ui.label(
-                            title(format!("{}/s", bytes(job.speed.max(0.) as u64)), 12.)
+                            title(format!("{}/s", bytes(reading.speed.max(0.) as u64)), 12.)
                                 .color(colors.accent),
                         );
                     } else if job.status != Status::Completed && job.total.is_some() {
-                        small(ui, &format!("{:.0}%", fraction(job) * 100.));
+                        small(ui, &format!("{:.0}%", fraction(job, reading.bytes) * 100.));
                     }
                 });
             });
             if job.status == Status::Downloading {
-                speed_chart(ui, history)
+                speed_chart(ui, history, reading.speed as f32)
                     .on_hover_text(language.text("Download speed over the last 30 seconds"));
             }
             if let Some(error) = &job.error {
@@ -1157,6 +1198,7 @@ impl App {
 
     pub fn update(&mut self, ctx: &egui::Context) {
         let snapshot = self.snapshot();
+        self.begin_transfer_frame(&snapshot);
         self.sync_theme(ctx, &snapshot);
         let language = self.applied_language;
         let colors = palette(ctx);
@@ -1573,13 +1615,14 @@ fn status_label(status: Status, c: theme::Palette, language: Language) -> (&'sta
         Status::Completed => (language.text("Complete"), c.success),
     }
 }
-fn fraction(job: &Download) -> f32 {
+fn fraction(job: &Download, received: u64) -> f32 {
     if job.status == Status::Completed {
         1.
     } else {
         job.total
             .filter(|n| *n > 0)
-            .map(|n| job.bytes as f32 / n as f32)
+            .map(|n| received as f64 / n as f64)
+            .map(|fraction| fraction as f32)
             .unwrap_or(0.)
             .clamp(0., 1.)
     }

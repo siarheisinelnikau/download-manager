@@ -9,11 +9,11 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 - Paste an HTTP(S) URL, choose an existing destination folder with Browse or enter its path, and edit the filename.
 - Queue downloads; pause, resume, cancel, retry and explicitly restart from zero.
 - Reorder queued items, pause all transfers and resume paused items.
-- Show smoothed transfer speed, a 30-second speed graph under each active download, bytes transferred and an estimated time remaining when available.
+- Show smoothed transfer speed, a 30-second speed graph, bytes transferred and an estimated time remaining. Visible downloads animate between reports at roughly 60 frames per second.
 - Configure 1–4 simultaneous files, a shared bandwidth limit in KiB/s and up to 32 connections per file. Parallel downloading starts enabled with 32 connections per file. Small files use fewer connections. Files without verifiable HTTP byte ranges use one connection.
 - Keep queue/history and settings across restarts. Unfinished jobs reopen paused; no download resumes without a user action.
 - Review completed downloads separately, open their save folder, and remove history entries while keeping their files. Downloaded files are never automatically opened or executed.
-- Keep transfers running in the Windows tray or Ubuntu AppIndicator menu. Windows also offers a compact download popup. A second launch opens the existing instance.
+- Keep transfers running in the Windows tray or Ubuntu AppIndicator menu. Both platforms offer a compact download popup. A second launch opens the existing instance.
 - Use one consistent application icon in the EXE, window, interface and tray, with embedded sizes from 16 to 256 pixels.
 - Choose English, Русский, Français, Deutsch, Español or Italiano in Settings. Language selection previews immediately; Save changes persists it. Queue, history, forms, tray controls, recovery and update actions are localized; raw technical diagnostics stay available.
 - Choose dark or light appearance in Settings. Dark is the default; the saved theme applies to the queue, settings, dialogs and compact popup. English is the complete fallback for older settings.
@@ -27,7 +27,7 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 4. If the server cannot safely resume, choose **••• → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.
 5. Open **Settings** using the gear in the upper right to change download defaults and limits, choose your **Language** by its native name and **Dark** or **Light** from the **Theme** list, disable startup checks or check/install an update. **Browse…** also chooses the default download folder. Language and theme selection preview immediately; **Save changes** keeps it across restarts. The **back arrow** returns to the queue and discards unsaved appearance changes.
 
-By default, closing the window keeps downloads running in the tray. On Ubuntu with AppIndicator support, the tray menu offers **Show downloads**, **New download**, **Pause all**, **Resume paused**, **Settings** and **Quit DownloadManager**. On Windows, the tray also supports a compact popup. Single-click the tray icon to show or hide a compact list of up to four unfinished downloads; **Open downloads** opens the full queue. Double-click opens the queue directly. Right-click opens **New download**, **Pause all**, **Resume paused**, **Settings** and **Quit DownloadManager**. The **×** button, Escape or clicking outside dismisses the popup. Settings and Quit are available from the tray context menu; the popup keeps only quick download actions. Disable **Keep running when closed** in Settings to exit on close instead. If the desktop tray is unavailable, closing exits the application.
+By default, closing the window keeps downloads running in the tray. On Ubuntu with AppIndicator support, select **Quick download view** from the tray menu for the compact list or **Show downloads** for the full window. On Windows, single-click the tray icon to show or hide a compact list of up to four unfinished downloads. **Open downloads** opens the full queue. Double-click opens the queue directly. Right-click opens **New download**, **Pause all**, **Resume paused**, **Settings** and **Quit DownloadManager**. The **×** button, Escape or clicking outside dismisses the popup. Settings and Quit are available from the tray context menu; the popup keeps only quick download actions. Disable **Keep running when closed** in Settings to exit on close instead. If the desktop tray is unavailable, closing exits the application.
 
 **Quit DownloadManager** requests checkpoints and waits for active workers to stop. A pending network read/request can delay exit until its timeout. A state-write error restores the window and displays a recovery message.
 
@@ -85,6 +85,8 @@ See [architecture](docs/ARCHITECTURE.md), [verification](docs/VERIFICATION.md) a
 The Ubuntu window below shows a live 32-connection loopback transfer.
 
 ![Live download speed graph on Ubuntu GNOME](docs/screenshots/ubuntu-speed-chart.png)
+
+![Compact tray window during a live Ubuntu download](docs/screenshots/ubuntu-tray-popup.png)
 
 These historical Windows screenshots were captured from the packaged Windows application before the speed graph and parallel controls were added. The queue and new-download views are 960×680 logical pixels, settings are 620×560, and the populated popup is 400×372. The empty popup is 400×256, including its full footer and bottom inset. The queue/history use synthetic paused/error/completed fixtures; no Internet transfer is implied. The isolated settings fixture disables startup checking; new installations enable it by default.
 
