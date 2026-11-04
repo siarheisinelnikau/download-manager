@@ -4,7 +4,7 @@ function Get-DownloadManagerPackage([string]$RepositoryRoot) {
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read the locked project version' }
     $package = ($metadataText | ConvertFrom-Json).packages | Where-Object { $_.name -eq 'download-manager' }
     if (-not $package.version) { throw 'DownloadManager package is missing from Cargo metadata' }
-    $assetName = "DownloadManager-v$($package.version).exe"
+    $assetName = "DownloadManager-v$($package.version)-windows-amd64.exe"
     [PSCustomObject]@{
         Version = $package.version
         AssetName = $assetName

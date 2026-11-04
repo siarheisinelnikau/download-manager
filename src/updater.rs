@@ -7,6 +7,15 @@ use std::{
 };
 
 pub fn config() -> Result<rust_auto_updator::Config> {
+    #[cfg(target_os = "linux")]
+    let mut config = rust_auto_updator::Config::debian(
+        "siarheisinelnikau",
+        "download-manager",
+        VERSION,
+        "download-manager",
+    )
+    .map_err(anyhow::Error::msg)?;
+    #[cfg(not(target_os = "linux"))]
     let mut config = rust_auto_updator::Config::new(
         "siarheisinelnikau",
         "download-manager",
@@ -14,11 +23,23 @@ pub fn config() -> Result<rust_auto_updator::Config> {
         "DownloadManager",
     )
     .map_err(anyhow::Error::msg)?;
+
+    #[cfg(target_os = "linux")]
+    {
+        config.product_name = "DownloadManager".into();
+        config.asset_platform = Some("ubuntu".into());
+        config.install.helper_name = "download-manager-update-helper".into();
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        config.asset_platform = Some("windows".into());
+        config.expected_subsystem = Some(2);
+        config.install.helper_name = "DownloadManager-update-helper.exe".into();
+    }
     config.allow_asset_digest = true;
-    config.expected_subsystem = Some(2);
     config.max_executable_size = 256 * 1024 * 1024;
     config.install.stage_prefix = ".DownloadManager-update-".into();
-    config.install.helper_name = "DownloadManager-update-helper.exe".into();
+    config.validate().map_err(anyhow::Error::msg)?;
     Ok(config)
 }
 
@@ -180,7 +201,14 @@ mod tests {
     #[test]
     fn product_adapter_accepts_canonical_digest_assets_and_rejects_other_products() {
         let config = config().unwrap();
-        let name = format!("{}-v99.0.0.exe", config.product_name);
+        let platform = config.asset_platform.as_deref().unwrap();
+        let extension = if cfg!(target_os = "linux") {
+            "deb"
+        } else {
+            "exe"
+        };
+        let arch = config.architecture.debian_name();
+        let name = format!("DownloadManager-v99.0.0-{platform}-{arch}.{extension}");
         let url = config.repository_url();
         let mut release = serde_json::json!({
             "tag_name":"v99.0.0", "html_url":format!("{url}/releases/tag/v99.0.0"),
@@ -194,7 +222,8 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        release["assets"][0]["name"] = "OtherProduct-v99.0.0.exe".into();
+        release["assets"][0]["name"] =
+            format!("OtherProduct-v99.0.0-{platform}-{arch}.{extension}").into();
         assert!(rust_auto_updator::parse_release(&release.to_string(), &config).is_err());
     }
 }

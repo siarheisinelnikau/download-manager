@@ -8,7 +8,7 @@ if (-not $Path) {
 }
 $versionInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo([IO.Path]::GetFullPath($Path))
 if ($ExpectedVersion -and ($versionInfo.FileVersion -ne $ExpectedVersion -or $versionInfo.ProductVersion -ne $ExpectedVersion)) { throw 'Packaged Windows version does not match Cargo.toml' }
-if ($versionInfo.OriginalFilename -ne "DownloadManager-v$($versionInfo.ProductVersion).exe") { throw 'OriginalFilename does not match the packaged product version' }
+if ($versionInfo.OriginalFilename -ne "DownloadManager-v$($versionInfo.ProductVersion)-windows-amd64.exe") { throw 'OriginalFilename does not match the packaged product version' }
 $bytes = [System.IO.File]::ReadAllBytes($Path)
 $pe = [BitConverter]::ToInt32($bytes, 60)
 if ([Text.Encoding]::ASCII.GetString($bytes, $pe, 4) -ne "PE`0`0") { throw 'Invalid PE signature' }

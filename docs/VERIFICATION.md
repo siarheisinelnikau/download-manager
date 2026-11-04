@@ -1,6 +1,12 @@
 # Verification record
 
-Date: 2026-11-01 (Europe/Minsk). Current local build: **0.2.0**. UI source commits: `f8661fe`, `05c6e31`; shared-updater/icon integration: `15a1e12`. Artifact source revision: `be1407012a02dd791e88e3f9a1eb5ee30aec7382`. Work stayed inside this repository. No publication, Computer Use, update installation or real user download was performed.
+## v0.4.0 Ubuntu verification
+
+On Ubuntu 26.04.1 amd64 with Rust and Cargo 1.99.1, the locked release build passed formatting, Clippy with warnings denied and all 38 Rust tests. The Ubuntu packaging script produced an amd64 Debian package with version 0.4.0.
+
+A real GNOME/XWayland session ran the executable extracted from that package. The GNOME AppIndicator host registered the application's menu. Resuming a fixture through the menu sent 32 simultaneous HTTP range requests. The window showed smoothed speed and ETA and rendered the [active speed chart](screenshots/ubuntu-speed-chart.png). The transfer continued after the window closed to the tray and the downloaded 32 MiB matched the fixture SHA-256. The tray menu restored the same window and quit the application. The package was also installed through polkit using a local 0.3.99 predecessor build to prepare the live update check.
+
+The release workflow checks and builds on Windows and Ubuntu 22.04. It verifies package metadata and SHA-256 before uploading both packages, the notices and a checksum manifest to a draft. The release becomes public once GitHub reports the expected SHA-256 for every uploaded asset.
 
 ## Artifact and checks
 

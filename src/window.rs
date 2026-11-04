@@ -249,7 +249,12 @@ impl Diagnostic {
                     && s["counts"]["rasters"] == 0
                     && s["counts"]["presents"] == 0
             });
-        let report = serde_json::json!({"renderer":"egui CPU rasterizer -> softbuffer Win32 GDI BitBlt", "executable":std::env::current_exe()?, "pid":std::process::id(),
+        let renderer = if cfg!(windows) {
+            "egui CPU rasterizer -> softbuffer Win32 GDI BitBlt"
+        } else {
+            "egui CPU rasterizer -> softbuffer X11"
+        };
+        let report = serde_json::json!({"renderer":renderer, "executable":std::env::current_exe()?, "pid":std::process::id(),
             "settings_page":self.settings,"new_download":self.new_download,"navigation":self.navigation,"popup":self.popup,"tray_lifecycle":self.tray,"complete":self.phase==PHASES.len(),"idle_hidden_render_gate":gate,"samples":self.samples,"repaint_causes":self.repaint_causes,"native_events":self.native_events,
             "limitations":"No keyboard/mouse automation or GPU telemetry. The disposable diagnostic window is not activated and disables its own cursor hit-testing to isolate idle samples from unrelated pointer movement. Normal input behavior is unchanged. Lifecycle transitions are initiated by the application; perceived stutter still needs user confirmation."});
         std::fs::write(&self.path, serde_json::to_vec_pretty(&report)?)?;
@@ -1337,10 +1342,7 @@ fn run_mode(
         return Err(error.into());
     }
     if host.diagnostic.as_ref().is_some_and(|d| d.tray) && !tray_created {
-        return Err(
-            "Native tray diagnostic unavailable: Windows rejected tray registration; see report"
-                .into(),
-        );
+        return Err("Native tray diagnostic unavailable. See the tray registration report".into());
     }
     if host.capture.as_ref().is_some_and(|c| !c.saved) {
         return Err("No live application frame was captured".into());

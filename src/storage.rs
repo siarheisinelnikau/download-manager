@@ -101,7 +101,13 @@ pub fn finalize(source: &Path, destination: &Path) -> Result<()> {
             windows_sys::Win32::Storage::FileSystem::MOVEFILE_WRITE_THROUGH,
         )
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    {
+        use rustix::fs::{CWD, RenameFlags, renameat_with};
+        renameat_with(CWD, source, CWD, destination, RenameFlags::NOREPLACE)?;
+        Ok(())
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         fs::hard_link(source, destination)?;
         fs::remove_file(source)?;
@@ -146,6 +152,10 @@ pub fn load_state(directory: &Path) -> Result<State> {
         )?;
     }
     state.settings.concurrency = state.settings.concurrency.clamp(1, 4);
+    state.settings.connections_per_download = state
+        .settings
+        .connections_per_download
+        .clamp(1, crate::model::MAX_CONNECTIONS);
     state.settings.bandwidth_kib = state.settings.bandwidth_kib.min(1_048_576);
     for job in &mut state.downloads {
         // Restart never initiates network transfers without a fresh user action.

@@ -1,6 +1,6 @@
 [package]
 name = "download-manager"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
@@ -8,7 +8,7 @@ description = "A native queued download manager with conservative verified resum
 repository = "https://github.com/siarheisinelnikau/download-manager"
 
 [dependencies]
-rust-auto-updator = { path = "../rust-auto-updator/crates/rust-auto-updator" }
+rust-auto-updator = { git = "https://github.com/siarheisinelnikau/rust-auto-updator", rev = "093e937cae174e0ec57c4485d8ce3b36d90e11f8", version = "=0.4.1" }
 anyhow = "1.0.104"
 bytemuck = "1.25.2"
 egui = { version = "=0.33.3", default-features = false, features = ["default_fonts"] }
@@ -28,6 +28,12 @@ winit = { version = "0.30.13", default-features = false, features = ["rwh_06", "
 windows = { version = "=0.61.3", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common"] }
 tray-icon = { version = "=0.21.3", default-features = false }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Threading", "Win32_System_LibraryLoader", "Win32_Security", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+rustix = { version = "1.1", features = ["fs"] }
+softbuffer = { version = "=0.4.8", default-features = false, features = ["x11", "x11-dlopen"] }
+tray-icon = { version = "=0.21.3", default-features = false }
 
 [build-dependencies]
 winresource = "0.1.34"

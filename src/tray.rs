@@ -2,7 +2,11 @@ use download_manager::{i18n::Language, manager::Snapshot, model::Status};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
-    Popup { x: f64, y: f64 },
+    #[cfg_attr(not(windows), allow(dead_code))]
+    Popup {
+        x: f64,
+        y: f64,
+    },
     Queue,
     NewDownload,
     Settings,
@@ -11,6 +15,7 @@ pub enum Command {
     Quit,
 }
 
+#[cfg(any(windows, test))]
 pub fn tooltip(snapshot: &Snapshot) -> String {
     let language = snapshot.state.settings.language;
     let active = snapshot
@@ -55,10 +60,11 @@ pub fn tooltip(snapshot: &Snapshot) -> String {
     }
 }
 
-#[cfg(windows)]
-pub struct Tray {
-    icon: tray_icon::TrayIcon,
+#[cfg(any(windows, target_os = "linux"))]
+pub struct NativeTray {
+    _icon: tray_icon::TrayIcon,
     alive: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(windows)]
     last_tooltip: String,
     pause: tray_icon::menu::MenuItem,
     resume: tray_icon::menu::MenuItem,
@@ -70,15 +76,15 @@ pub struct Tray {
     language: Option<Language>,
 }
 
-#[cfg(windows)]
-impl Tray {
+#[cfg(any(windows, target_os = "linux"))]
+impl NativeTray {
     pub fn new(send: std::sync::Arc<dyn Fn(Command) + Send + Sync>) -> anyhow::Result<Self> {
         use std::sync::{
             Arc,
             atomic::{AtomicBool, Ordering},
         };
         use tray_icon::{
-            MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent,
+            TrayIconBuilder,
             menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
         };
         let alive = Arc::new(AtomicBool::new(true));
@@ -100,14 +106,23 @@ impl Tray {
             &quit,
         ])?;
         // Rasterize at the shell's small-icon metric; do not shrink a fixed 32px bitmap.
+        #[cfg(windows)]
         let side = unsafe {
             windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(
                 windows_sys::Win32::UI::WindowsAndMessaging::SM_CXSMICON,
             )
         }
         .clamp(16, 256) as u32;
-        let icon = TrayIconBuilder::new()
-            .with_id("download-manager")
+        #[cfg(target_os = "linux")]
+        let side = 32;
+        let builder = TrayIconBuilder::new();
+        #[cfg(target_os = "linux")]
+        let builder = builder
+            .with_id(format!("download-manager-{}", std::process::id()))
+            .with_temp_dir_path(download_manager::storage::data_directory()?.join("tray-icons"));
+        #[cfg(windows)]
+        let builder = builder.with_id("download-manager");
+        let icon = builder
             .with_menu(Box::new(menu))
             .with_menu_on_left_click(false)
             .with_tooltip("DownloadManager · Click to view downloads")
@@ -117,40 +132,44 @@ impl Tray {
                 side,
             )?)
             .build()?;
-        let active = alive.clone();
-        let callback = send.clone();
-        let skip_up = AtomicBool::new(false);
-        TrayIconEvent::set_event_handler(Some(move |event| {
-            if !active.load(Ordering::Relaxed) {
-                return;
-            }
-            if matches!(
-                event,
-                TrayIconEvent::DoubleClick {
-                    button: MouseButton::Left,
-                    ..
-                }
-            ) {
-                skip_up.store(true, Ordering::Relaxed);
-                callback(Command::Queue);
-                return;
-            }
-            if let TrayIconEvent::Click {
-                rect,
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if skip_up.swap(false, Ordering::Relaxed) {
+        #[cfg(windows)]
+        {
+            use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
+            let active = alive.clone();
+            let callback = send.clone();
+            let skip_up = AtomicBool::new(false);
+            TrayIconEvent::set_event_handler(Some(move |event| {
+                if !active.load(Ordering::Relaxed) {
                     return;
                 }
-                callback(Command::Popup {
-                    x: rect.position.x + rect.size.width as f64 / 2.,
-                    y: rect.position.y,
-                });
-            }
-        }));
+                if matches!(
+                    event,
+                    TrayIconEvent::DoubleClick {
+                        button: MouseButton::Left,
+                        ..
+                    }
+                ) {
+                    skip_up.store(true, Ordering::Relaxed);
+                    callback(Command::Queue);
+                    return;
+                }
+                if let TrayIconEvent::Click {
+                    rect,
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } = event
+                {
+                    if skip_up.swap(false, Ordering::Relaxed) {
+                        return;
+                    }
+                    callback(Command::Popup {
+                        x: rect.position.x + rect.size.width as f64 / 2.,
+                        y: rect.position.y,
+                    });
+                }
+            }));
+        }
         let active = alive.clone();
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
             if !active.load(Ordering::Relaxed) {
@@ -168,8 +187,9 @@ impl Tray {
             send(command);
         }));
         Ok(Self {
-            icon,
+            _icon: icon,
             alive,
+            #[cfg(windows)]
             last_tooltip: String::new(),
             pause,
             resume,
@@ -181,8 +201,7 @@ impl Tray {
             language: None,
         })
     }
-    pub fn update(&mut self, snapshot: &Snapshot) {
-        let language = snapshot.state.settings.language;
+    fn update_menu(&mut self, language: Language, enabled: (bool, bool, bool)) {
         if self.language != Some(language) {
             self.open.set_text(language.text("Show downloads"));
             self.new.set_text(language.text("New download"));
@@ -192,50 +211,72 @@ impl Tray {
             self.quit.set_text(language.text("Quit DownloadManager"));
             self.language = Some(language);
         }
-        let enabled = (
-            snapshot
-                .state
-                .downloads
-                .iter()
-                .any(|d| matches!(d.status, Status::Downloading | Status::Queued)),
-            snapshot
-                .state
-                .downloads
-                .iter()
-                .any(|d| d.status == Status::Paused),
-            snapshot.ready && !snapshot.stopping,
-        );
         if self.last_enabled != Some(enabled) {
             self.pause.set_enabled(enabled.0);
             self.resume.set_enabled(enabled.1);
             self.new.set_enabled(enabled.2);
             self.last_enabled = Some(enabled);
         }
+    }
+
+    #[cfg(windows)]
+    pub fn update(&mut self, snapshot: &Snapshot) {
+        let (language, enabled) = menu_state(snapshot);
+        self.update_menu(language, enabled);
         let text = tooltip(snapshot);
-        if text != self.last_tooltip && self.icon.set_tooltip(Some(&text)).is_ok() {
+        if text != self.last_tooltip && self._icon.set_tooltip(Some(&text)).is_ok() {
             self.last_tooltip = text;
         }
     }
+
+    #[cfg(windows)]
     pub fn anchor(&self) -> Option<(f64, f64)> {
-        self.icon
+        self._icon
             .rect()
             .map(|r| (r.position.x + r.size.width as f64 / 2., r.position.y))
     }
+    #[cfg(windows)]
     pub fn native_window(&self) -> Option<usize> {
-        Some(self.icon.window_handle() as usize)
+        Some(self._icon.window_handle() as usize)
     }
 }
-#[cfg(windows)]
-impl Drop for Tray {
+#[cfg(any(windows, target_os = "linux"))]
+impl Drop for NativeTray {
     fn drop(&mut self) {
         self.alive
             .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(any(windows, target_os = "linux"))]
+type MenuState = (Language, (bool, bool, bool));
+
+#[cfg(any(windows, target_os = "linux"))]
+fn menu_state(snapshot: &Snapshot) -> MenuState {
+    let mut pause = false;
+    let mut resume = false;
+    for job in &snapshot.state.downloads {
+        pause |= matches!(job.status, Status::Downloading | Status::Queued);
+        resume |= job.status == Status::Paused;
+    }
+    (
+        snapshot.state.settings.language,
+        (pause, resume, snapshot.ready && !snapshot.stopping),
+    )
+}
+
+#[cfg(windows)]
+pub type Tray = NativeTray;
+
+#[cfg(target_os = "linux")]
+#[path = "tray_linux.rs"]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use linux::Tray;
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub struct Tray;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 impl Tray {
     pub fn new(_: std::sync::Arc<dyn Fn(Command) + Send + Sync>) -> anyhow::Result<Self> {
         anyhow::bail!("System tray is supported on Windows only")

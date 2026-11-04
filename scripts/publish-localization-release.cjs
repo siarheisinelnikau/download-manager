@@ -6,8 +6,11 @@ module.exports = async ({ github, context, core }) => {
   const directory = '.release-stage';
   const release = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
   const subject = context.payload.head_commit?.message.split('\n')[0].replace(/\r$/, '');
+  const expectedSubject = release.kind === 'desktop'
+    ? `Release DownloadManager v${release.version}`
+    : `Release localization v${release.version}`;
   if (context.eventName !== 'push' || context.ref !== 'refs/heads/main' ||
-      subject !== `Release localization v${release.version}` || release.commit !== context.sha ||
+      subject !== expectedSubject || release.commit !== context.sha ||
       !/^\d+\.\d+\.\d+$/.test(release.version) || release.tag !== `v${release.version}`) {
     throw new Error('The explicit release commit, tag and checked artifacts must match.');
   }
@@ -21,10 +24,20 @@ module.exports = async ({ github, context, core }) => {
     const digest = `sha256:${crypto.createHash('sha256').update(data).digest('hex')}`;
     if (!data.length || data.length !== asset.size || digest !== asset.digest) throw new Error(`Staged asset changed: ${asset.name}`);
   }
-  const primaryAsset = release.kind === 'source' ?
-    `${release.product}-v${release.version}-source.zip` : `${release.product}-v${release.version}.exe`;
-  if (!names.has(primaryAsset) || !names.has('SHA256SUMS.txt')) {
-    throw new Error('Missing canonical release asset or checksums.');
+  let requiredAssets;
+  if (release.kind === 'desktop') {
+    requiredAssets = [
+      `DownloadManager-v${release.version}-windows-amd64.exe`,
+      `DownloadManager-v${release.version}-ubuntu-amd64.deb`,
+      `DownloadManager-v${release.version}-notices.zip`,
+    ];
+  } else if (release.kind === 'source') {
+    requiredAssets = [`${release.product}-v${release.version}-source.zip`];
+  } else {
+    requiredAssets = [`${release.product}-v${release.version}.exe`];
+  }
+  if (![...requiredAssets, 'SHA256SUMS.txt'].every(name => names.has(name))) {
+    throw new Error('Missing canonical release assets or checksums.');
   }
   const repository = context.repo;
   async function assertTagTarget() {
