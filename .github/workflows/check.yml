@@ -1,18 +1,15 @@
-name: Windows checks and portable build
+name: Windows and Ubuntu checks and packages
 on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
+env:
+  CARGO_BUILD_JOBS: 2
+  CARGO_TARGET_DIR: target
 jobs:
   windows:
     runs-on: windows-latest
-    env:
-      CARGO_BUILD_JOBS: 2
-      CARGO_TARGET_DIR: target
     steps:
       - uses: actions/checkout@v4
-      - name: Provision shared updater source
-        shell: pwsh
-        run: ./scripts/provision-shared-updater.ps1
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -20,24 +17,55 @@ jobs:
       - name: Format, lint and synthetic/loopback tests
         shell: pwsh
         run: ./scripts/check.ps1 -Loopback
-      - name: Build portable Windows x64 package
+      - name: Build portable Windows amd64 package
         shell: pwsh
         run: ./scripts/package.ps1 -SkipChecks
       - uses: actions/upload-artifact@v4
         with:
-          name: DownloadManager-Windows-x64
+          name: DownloadManager-windows-amd64
           path: dist/*
 
-  localization-release:
-    name: Publish the explicitly requested localization release
-    needs: windows
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release localization v')
-    runs-on: windows-latest
+  ubuntu:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install Ubuntu build and smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libssl-dev xvfb xauth
+      - name: Format, lint and synthetic/loopback tests
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --locked --all-targets --features loopback-tests -- -D warnings
+          cargo test --locked --all-targets --features loopback-tests -- --test-threads=2
+      - name: Build Ubuntu amd64 package
+        run: ./scripts/package-ubuntu.sh
+      - name: Render a bounded Ubuntu settings frame
+        run: |
+          export DOWNLOAD_MANAGER_DATA_DIR="$PWD/.local/gui-smoke"
+          mkdir -p "$DOWNLOAD_MANAGER_DATA_DIR"
+          printf '%s\n' '{"schema":1,"next_id":1,"settings":{"startup_update_check":false},"downloads":[]}' > "$DOWNLOAD_MANAGER_DATA_DIR/state.json"
+          xvfb-run -a timeout 10s target/x86_64-unknown-linux-gnu/release/download-manager \
+            --capture-ui settings "$DOWNLOAD_MANAGER_DATA_DIR/settings.png"
+          test -s "$DOWNLOAD_MANAGER_DATA_DIR/settings.png"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DownloadManager-ubuntu-amd64
+          path: dist/*
+
+  publish:
+    name: Publish the requested desktop release
+    needs: [windows, ubuntu]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release DownloadManager v')
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     permissions:
       contents: write
     concurrency:
-      group: localization-release
+      group: download-manager-release
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -45,12 +73,10 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
-          name: DownloadManager-Windows-x64
           path: .release-input
-      - name: Verify the checked executable, companion and notices
-        shell: pwsh
-        run: ./scripts/stage-localization-release.ps1
-      - name: Publish only after every asset is verified
+      - name: Verify both packages and prepare release assets
+        run: node scripts/stage-platform-release.cjs
+      - name: Publish verified assets
         uses: actions/github-script@v7
         with:
           script: |

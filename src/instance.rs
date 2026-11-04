@@ -128,14 +128,103 @@ mod windows {
 }
 #[cfg(windows)]
 pub use windows::*;
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+mod linux {
+    use anyhow::{Context, Result, ensure};
+    use sha2::{Digest, Sha256};
+    use std::{
+        io::ErrorKind,
+        os::{
+            linux::net::SocketAddrExt,
+            unix::net::{SocketAddr, UnixDatagram},
+        },
+        path::Path,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        thread,
+    };
+
+    pub struct Instance {
+        notify: UnixDatagram,
+        stopping: Arc<AtomicBool>,
+        worker: Option<thread::JoinHandle<()>>,
+    }
+
+    pub enum Acquisition {
+        Primary(Instance),
+        Activated,
+    }
+
+    pub fn acquire(
+        directory: &Path,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        activate_only: bool,
+    ) -> Result<Acquisition> {
+        std::fs::create_dir_all(directory)?;
+        let key = Sha256::digest(directory.canonicalize()?.as_os_str().as_encoded_bytes());
+        let address = SocketAddr::from_abstract_name(format!("download-manager-{key:x}"))?;
+        let notify = UnixDatagram::unbound()?;
+        notify.set_nonblocking(true)?;
+        let listener = match UnixDatagram::bind_addr(&address) {
+            Ok(listener) => listener,
+            Err(error) if error.kind() == ErrorKind::AddrInUse => {
+                notify.connect_addr(&address)?;
+                notify
+                    .send(b"open")
+                    .context("Cannot notify the existing instance")?;
+                return Ok(Acquisition::Activated);
+            }
+            Err(error) => return Err(error).context("Cannot listen for instance activation"),
+        };
+        ensure!(
+            !activate_only,
+            "No running instance for this data directory"
+        );
+        notify.connect_addr(&address)?;
+        let stopping = Arc::new(AtomicBool::new(false));
+        let stopped = stopping.clone();
+        let worker = thread::Builder::new()
+            .name("instance-activation".into())
+            .spawn(move || {
+                let mut message = [0; 8];
+                while let Ok(size) = listener.recv(&mut message) {
+                    if stopped.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    if &message[..size] == b"open" {
+                        wake();
+                    }
+                }
+            })?;
+        Ok(Acquisition::Primary(Instance {
+            notify,
+            stopping,
+            worker: Some(worker),
+        }))
+    }
+
+    impl Drop for Instance {
+        fn drop(&mut self) {
+            self.stopping.store(true, Ordering::Relaxed);
+            let _ = self.notify.send(b"stop");
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+}
+#[cfg(target_os = "linux")]
+pub use linux::*;
+#[cfg(not(any(windows, target_os = "linux")))]
 pub struct Instance;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub enum Acquisition {
     Primary(Instance),
     Activated,
 }
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn acquire(
     _: &std::path::Path,
     _: std::sync::Arc<dyn Fn() + Send + Sync>,

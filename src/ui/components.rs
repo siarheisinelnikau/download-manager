@@ -1,4 +1,5 @@
 use crate::theme::{palette, title};
+use download_manager::manager::{SPEED_HISTORY_WINDOW, SpeedHistory};
 use egui::{Color32, Pos2, Response, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 #[derive(Clone, Copy)]
@@ -142,6 +143,60 @@ pub fn badge(ui: &mut Ui, text: &str, foreground: Color32, background: Color32) 
         .galley(rect.center() - galley.size() / 2., galley, foreground);
     response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, ui.is_enabled(), text));
+}
+
+pub fn speed_chart(ui: &mut Ui, history: Option<&SpeedHistory>) -> Response {
+    let colors = palette(ui.ctx());
+    let (rect, response) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.), Sense::hover());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 4., colors.success_surface);
+    let grid = Stroke::new(1.0_f32, colors.border);
+    for row in 1..4 {
+        let y = rect.top() + rect.height() * row as f32 / 4.;
+        painter.hline(rect.x_range(), y, grid);
+    }
+    for column in 1..12 {
+        let x = rect.left() + rect.width() * column as f32 / 12.;
+        painter.vline(x, rect.y_range(), grid);
+    }
+    if let Some(history) = history.filter(|values| values.len() >= 2) {
+        let last = history.back().unwrap().0;
+        let peak = history
+            .iter()
+            .map(|&(_, speed)| speed)
+            .fold(1_f32, f32::max)
+            * 1.15;
+        let points: Vec<_> = history
+            .iter()
+            .map(|&(time, speed)| {
+                let x = 1.
+                    - last.duration_since(time).as_secs_f32() / SPEED_HISTORY_WINDOW.as_secs_f32();
+                Pos2::new(
+                    rect.left() + rect.width() * x,
+                    rect.bottom() - rect.height() * speed / peak,
+                )
+            })
+            .collect();
+        let mut fill = egui::Mesh::default();
+        let color = colors.success.gamma_multiply(0.28);
+        for point in &points {
+            fill.colored_vertex(*point, color);
+            fill.colored_vertex(Pos2::new(point.x, rect.bottom()), color);
+        }
+        for i in 0..points.len() as u32 - 1 {
+            let a = i * 2;
+            fill.add_triangle(a, a + 1, a + 2);
+            fill.add_triangle(a + 2, a + 1, a + 3);
+        }
+        painter.add(egui::Shape::mesh(fill));
+        painter.add(egui::Shape::line(
+            points,
+            Stroke::new(1.5_f32, colors.success),
+        ));
+    }
+    painter.rect_stroke(rect, 4., grid, StrokeKind::Inside);
+    response
 }
 
 pub fn progress(ui: &mut Ui, fraction: f32, color: Color32) {

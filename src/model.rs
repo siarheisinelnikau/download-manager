@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+pub const MAX_CONNECTIONS: usize = 32;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const REPOSITORY: &str = "siarheisinelnikau/download-manager";
 
@@ -52,6 +53,8 @@ pub enum Theme {
 pub struct Settings {
     pub language: crate::i18n::Language,
     pub concurrency: usize,
+    pub parallel_downloads: bool,
+    pub connections_per_download: usize,
     pub bandwidth_kib: u64,
     pub startup_update_check: bool,
     pub default_directory: PathBuf,
@@ -65,6 +68,8 @@ impl Default for Settings {
         Self {
             language: crate::i18n::Language::English,
             concurrency: 2,
+            parallel_downloads: true,
+            connections_per_download: MAX_CONNECTIONS,
             bandwidth_kib: 0,
             startup_update_check: true,
             close_to_tray: true,

@@ -293,3 +293,99 @@ fn follows_http_redirects_and_decodes_chunked_bodies() {
     redirect_handle.join().unwrap();
     body_handle.join().unwrap();
 }
+
+#[test]
+fn parallel_ranges_join_in_order_and_rejected_ranges_fall_back() {
+    const HALF: usize = 256 * 1024;
+    const SIZE: usize = HALF * 2;
+
+    for reject_segment in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/fixture", listener.local_addr().unwrap());
+        let server = thread::spawn(move || {
+            thread::scope(|scope| {
+                let mut handlers = Vec::new();
+                for _ in 0..3 {
+                    let mut stream = accept(&listener);
+                    handlers.push(scope.spawn(move || {
+                        use std::io::{BufRead, BufReader};
+
+                        stream
+                            .set_read_timeout(Some(Duration::from_secs(5)))
+                            .unwrap();
+                        stream
+                            .set_write_timeout(Some(Duration::from_secs(5)))
+                            .unwrap();
+                        let mut reader = BufReader::new(&mut stream);
+                        let mut range = None;
+                        let mut if_range = None;
+                        loop {
+                            let mut line = String::new();
+                            assert!(reader.read_line(&mut line).unwrap() > 0);
+                            if line == "\r\n" {
+                                break;
+                            }
+                            if let Some((name, value)) = line.split_once(':') {
+                                match name.to_ascii_lowercase().as_str() {
+                                    "range" => range = Some(value.trim().to_owned()),
+                                    "if-range" => if_range = Some(value.trim().to_owned()),
+                                    _ => {}
+                                }
+                            }
+                        }
+                        let Some(range) = range else {
+                            write!(
+                                stream,
+                                "HTTP/1.1 200 OK\r\nETag: \"v1\"\r\nContent-Length: {SIZE}\r\nConnection: close\r\n\r\n"
+                            )
+                            .unwrap();
+                            // The segmented path drops this response after all range headers pass.
+                            let _ = stream.write_all(&vec![29; HALF]);
+                            let _ = stream.write_all(&vec![71; HALF]);
+                            return None;
+                        };
+                        assert_eq!(if_range.as_deref(), Some("\"v1\""));
+                        let first = range == format!("bytes=0-{}", HALF - 1);
+                        let (start, end, value) = if first {
+                            (0, HALF - 1, 17)
+                        } else {
+                            assert_eq!(range, format!("bytes={HALF}-{}", SIZE - 1));
+                            (HALF, SIZE - 1, 53)
+                        };
+                        let tag = if reject_segment && !first { "v2" } else { "v1" };
+                        write!(
+                            stream,
+                            "HTTP/1.1 206 Partial Content\r\nETag: \"{tag}\"\r\nContent-Range: bytes {start}-{end}/{SIZE}\r\nContent-Length: {HALF}\r\nConnection: close\r\n\r\n"
+                        )
+                        .unwrap();
+                        let _ = stream.write_all(&vec![value; HALF]);
+                        Some(start)
+                    }));
+                }
+                let mut offsets: Vec<_> = handlers
+                    .into_iter()
+                    .filter_map(|handler| handler.join().unwrap())
+                    .collect();
+                offsets.sort_unstable();
+                assert_eq!(offsets, [0, HALF]);
+            });
+        });
+
+        let dir = fixture_dir();
+        let job = job(url, &dir);
+        let result = engine::transfer_with_connections(
+            &job,
+            Arc::new(AtomicU8::new(0)),
+            Arc::new(Bandwidth::default()),
+            32,
+            |_| {},
+        );
+        assert_eq!(result.unwrap(), Outcome::Completed);
+        let actual = std::fs::read(&job.destination).unwrap();
+        assert_eq!(actual.len(), SIZE);
+        let (first, second) = if reject_segment { (29, 71) } else { (17, 53) };
+        assert!(actual[..HALF].iter().all(|&byte| byte == first));
+        assert!(actual[HALF..].iter().all(|&byte| byte == second));
+        server.join().unwrap();
+    }
+}

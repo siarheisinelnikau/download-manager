@@ -7,7 +7,7 @@ use crate::{
 use anyhow::{Context, Result, bail, ensure};
 use fs2::FileExt;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fs::{self, OpenOptions},
     path::PathBuf,
     sync::{
@@ -16,11 +16,17 @@ use std::{
         mpsc::{self, SyncSender},
     },
     thread,
+    time::{Duration, Instant},
 };
+
+pub const SPEED_HISTORY_WINDOW: Duration = Duration::from_secs(30);
+pub type SpeedHistory = VecDeque<(Instant, f32)>;
+const SPEED_HISTORY_SAMPLES: usize = 121;
 
 #[derive(Clone, Debug)]
 pub struct Snapshot {
     pub state: State,
+    pub speed_history: HashMap<u64, SpeedHistory>,
     pub ready: bool,
     pub fatal: Option<String>,
     pub notice: Option<String>,
@@ -34,6 +40,7 @@ impl Default for Snapshot {
     fn default() -> Self {
         Self {
             state: State::default(),
+            speed_history: HashMap::new(),
             ready: false,
             fatal: None,
             notice: None,
@@ -71,6 +78,7 @@ enum Event {
     Progress(u64, Progress),
     Finished(u64, std::result::Result<Outcome, String>, Option<Progress>),
     Update(UpdateStatus),
+    InstallFinished(Result<(), String>),
 }
 
 pub struct Manager {
@@ -161,6 +169,7 @@ fn supervise(
     let mut active: HashMap<u64, Arc<AtomicU8>> = HashMap::new();
     let mut update_busy = false;
     let mut install_pending = None;
+    let mut installing = false;
     if snapshot.state.settings.startup_update_check {
         update_busy = true;
         snapshot.update = UpdateStatus::Checking;
@@ -240,12 +249,22 @@ fn supervise(
                 }
             }
             Event::Progress(id, progress) => {
+                let history = snapshot.speed_history.entry(id).or_default();
+                let now = Instant::now();
+                while history.front().is_some_and(|(time, _)| {
+                    history.len() == SPEED_HISTORY_SAMPLES
+                        || now.duration_since(*time) > SPEED_HISTORY_WINDOW
+                }) {
+                    history.pop_front();
+                }
+                history.push_back((now, progress.speed as f32));
                 if let Some(job) = snapshot.state.downloads.iter_mut().find(|j| j.id == id) {
                     apply_progress(job, progress);
                 }
             }
             Event::Finished(id, result, progress) => {
                 active.remove(&id);
+                snapshot.speed_history.remove(&id);
                 if let Some(job) = snapshot.state.downloads.iter_mut().find(|j| j.id == id) {
                     if let Some(progress) = progress {
                         apply_progress(job, progress);
@@ -286,6 +305,16 @@ fn supervise(
                 }
                 snapshot.update = status;
             }
+            Event::InstallFinished(result) => {
+                installing = false;
+                match result {
+                    Ok(()) => snapshot.stopped = true,
+                    Err(error) => {
+                        snapshot.stopping = false;
+                        snapshot.update = UpdateStatus::Error(error);
+                    }
+                }
+            }
             _ => {}
         }
         let saved = !dirty || persist(&directory, &mut snapshot);
@@ -304,6 +333,11 @@ fn supervise(
             }
         }
         if !snapshot.stopping && saved {
+            let connections = if snapshot.state.settings.parallel_downloads {
+                snapshot.state.settings.connections_per_download
+            } else {
+                1
+            };
             for job in &mut snapshot.state.downloads {
                 if active.len() >= snapshot.state.settings.concurrency {
                     break;
@@ -321,29 +355,35 @@ fn supervise(
                 thread::spawn(move || {
                     let mut latest = None;
                     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        engine::transfer(&job, control, bandwidth, |progress| {
-                            latest = Some(progress.clone());
-                            let _ = tx.try_send(Event::Progress(job.id, progress));
-                        })
+                        engine::transfer_with_connections(
+                            &job,
+                            control,
+                            bandwidth,
+                            connections,
+                            |progress| {
+                                latest = Some(progress.clone());
+                                let _ = tx.try_send(Event::Progress(job.id, progress));
+                            },
+                        )
                     }));
                     let result = match result { Ok(result) => result.map_err(|e| format!("{e:#}")), Err(_) => Err("Download worker failed unexpectedly. Partial checkpoint preserved; retry after restarting.".into()) };
                     let _ = tx.send(Event::Finished(job.id, result, latest));
                 });
             }
         }
-        if snapshot.stopping && active.is_empty() {
+        if snapshot.stopping && !snapshot.stopped && !installing && active.is_empty() {
             if !persist(&directory, &mut snapshot) {
                 snapshot.stopping = false;
                 snapshot.update = UpdateStatus::Error("Installation/exit deferred because queue state could not be saved. Fix storage and close again.".into());
                 install_pending = None;
             } else if let Some(staged) = install_pending.take() {
-                match updater::launch_installer(&staged) {
-                    Ok(()) => snapshot.stopped = true,
-                    Err(error) => {
-                        snapshot.stopping = false;
-                        snapshot.update = UpdateStatus::Error(format!("{error:#}"));
-                    }
-                }
+                installing = true;
+                let tx = tx.clone();
+                thread::spawn(move || {
+                    let result =
+                        updater::launch_installer(&staged).map_err(|error| format!("{error:#}"));
+                    let _ = tx.send(Event::InstallFinished(result));
+                });
             } else {
                 snapshot.stopped = true;
             }
@@ -414,6 +454,9 @@ fn apply(
         }
         Command::Settings(mut settings) => {
             settings.concurrency = settings.concurrency.clamp(1, 4);
+            settings.connections_per_download = settings
+                .connections_per_download
+                .clamp(1, crate::model::MAX_CONNECTIONS);
             settings.bandwidth_kib = settings.bandwidth_kib.min(1_048_576);
             bandwidth.set_limit(settings.bandwidth_kib);
             state.settings = settings;

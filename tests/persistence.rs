@@ -12,6 +12,8 @@ fn state_survives_atomic_replacement_and_restarts_paused() {
         settings: Settings {
             startup_update_check: false,
             concurrency: 3,
+            parallel_downloads: false,
+            connections_per_download: 8,
             bandwidth_kib: 125,
             close_to_tray: false,
             theme: Theme::Light,
@@ -37,6 +39,8 @@ fn state_survives_atomic_replacement_and_restarts_paused() {
     let restored = storage::load_state(dir.path()).unwrap();
     assert_eq!(restored.settings.bandwidth_kib, 250);
     assert_eq!(restored.settings.concurrency, 3);
+    assert!(!restored.settings.parallel_downloads);
+    assert_eq!(restored.settings.connections_per_download, 8);
     assert!(!restored.settings.startup_update_check);
     assert!(!restored.settings.close_to_tray);
     assert_eq!(restored.settings.theme, Theme::Light);
@@ -52,12 +56,17 @@ fn state_survives_atomic_replacement_and_restarts_paused() {
 fn existing_settings_without_a_theme_use_dark_and_keep_other_preferences() {
     let dir = support::fixture_dir();
     let mut value = serde_json::to_value(State::default()).unwrap();
-    value["settings"].as_object_mut().unwrap().remove("theme");
+    let settings = value["settings"].as_object_mut().unwrap();
+    for field in ["theme", "parallel_downloads", "connections_per_download"] {
+        settings.remove(field);
+    }
     value["settings"]["bandwidth_kib"] = 512.into();
     value["settings"]["startup_update_check"] = false.into();
     storage::atomic_json(&dir.path().join("state.json"), &value).unwrap();
     let state = storage::load_state(dir.path()).unwrap();
     assert_eq!(state.settings.theme, Theme::Dark);
+    assert!(state.settings.parallel_downloads);
+    assert_eq!(state.settings.connections_per_download, 32);
     assert_eq!(state.settings.bandwidth_kib, 512);
     assert!(!state.settings.startup_update_check);
 }

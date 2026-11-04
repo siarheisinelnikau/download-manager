@@ -122,15 +122,59 @@ mod native {
 #[cfg(windows)]
 pub use native::{probe, show};
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+pub fn show(
+    _: usize,
+    initial: &Path,
+    language: download_manager::i18n::Language,
+) -> anyhow::Result<Option<PathBuf>> {
+    use anyhow::{Context, ensure};
+    use std::{ffi::OsString, os::unix::ffi::OsStringExt, process::Command};
+
+    let mut command = Command::new("zenity");
+    command.args([
+        "--file-selection",
+        "--directory",
+        "--title",
+        language.text("Choose a folder"),
+    ]);
+    if let Some(folder) = initial
+        .ancestors()
+        .find(|path| path.is_absolute() && path.is_dir())
+    {
+        let mut path = folder.as_os_str().to_os_string();
+        path.push("/");
+        command.arg("--filename").arg(path);
+    }
+    let output = command
+        .output()
+        .context("Cannot start the Ubuntu folder picker (zenity)")?;
+    if output.status.code() == Some(1) && output.stdout.is_empty() {
+        return Ok(None);
+    }
+    ensure!(
+        output.status.success(),
+        "Ubuntu folder picker failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let chosen = output.stdout.strip_suffix(b"\n").unwrap_or(&output.stdout);
+    let folder = PathBuf::from(OsString::from_vec(chosen.to_vec()));
+    ensure!(
+        folder.is_absolute() && folder.is_dir(),
+        "The selected folder is unavailable"
+    );
+    Ok(Some(folder))
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn show(
     _: usize,
     _: &Path,
     _: download_manager::i18n::Language,
 ) -> anyhow::Result<Option<PathBuf>> {
-    anyhow::bail!("The folder dialog is supported on Windows only")
+    anyhow::bail!("The folder dialog is unavailable on this platform")
 }
 #[cfg(not(windows))]
 pub fn probe(_: &Path) -> anyhow::Result<()> {
-    anyhow::bail!("The folder dialog is supported on Windows only")
+    anyhow::bail!("Folder dialog configuration probe is available on Windows only")
 }

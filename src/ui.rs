@@ -1,10 +1,10 @@
 mod components;
 use crate::folder_picker::{Request as FolderRequest, Target as FolderTarget};
 use crate::theme::{self, palette, title};
-use components::{Glyph, badge, file_icon, glyph, icon_button, progress, switch, tab};
+use components::{Glyph, badge, file_icon, glyph, icon_button, progress, speed_chart, switch, tab};
 use download_manager::{
     i18n::Language,
-    manager::{Command, Manager, Snapshot},
+    manager::{Command, Manager, Snapshot, SpeedHistory},
     model::{
         Download, Settings, Status, Theme, VERSION, suggested_filename, validate_filename,
         validate_url,
@@ -23,6 +23,7 @@ pub struct App {
     manager: Option<Manager>,
     startup_error: Option<String>,
     local_error: Option<String>,
+    tray_available: bool,
     completed: bool,
     add_open: bool,
     settings_open: bool,
@@ -63,6 +64,7 @@ impl App {
             manager,
             startup_error,
             local_error: None,
+            tray_available: true,
             completed: false,
             add_open: false,
             settings_open: false,
@@ -122,6 +124,7 @@ impl App {
         self.send(command);
     }
     pub fn tray_unavailable(&mut self, error: &str) {
+        self.tray_available = false;
         let language = self.applied_language;
         self.local_error = Some(language.format(
             "System tray unavailable. Closing the window will exit. {error}",
@@ -708,6 +711,20 @@ impl App {
                                 }
                             });
                     });
+                    setting_row(ui, language.text("Parallel downloading"), |ui| {
+                        switch(
+                            ui,
+                            &mut self.settings.parallel_downloads,
+                            language.text("Parallel downloading"),
+                        );
+                        ui.add_enabled(
+                            self.settings.parallel_downloads,
+                            egui::DragValue::new(&mut self.settings.connections_per_download)
+                                .range(1..=download_manager::model::MAX_CONNECTIONS),
+                        )
+                        .on_hover_text(language.text("Connections per file"));
+                        small(ui, language.text("Connections per file"));
+                    });
                     setting_row(ui, language.text("Download speed"), |ui| {
                         let mut limited = self.settings.bandwidth_kib > 0;
                         if switch(ui, &mut limited, language.text("Limit download speed")).changed() {
@@ -873,7 +890,7 @@ impl App {
         }
     }
 
-    fn download_row(&mut self, ui: &mut egui::Ui, job: &Download) {
+    fn download_row(&mut self, ui: &mut egui::Ui, job: &Download, history: Option<&SpeedHistory>) {
         let language = self.applied_language;
         let colors = palette(ui.ctx());
         let filename = job
@@ -1015,6 +1032,10 @@ impl App {
                     }
                 });
             });
+            if job.status == Status::Downloading {
+                speed_chart(ui, history)
+                    .on_hover_text(language.text("Download speed over the last 30 seconds"));
+            }
             if let Some(error) = &job.error {
                 egui::Frame::new()
                     .fill(colors.error_surface)
@@ -1108,28 +1129,29 @@ impl App {
 
     fn open_folder(&mut self, job: &Download) {
         let language = self.applied_language;
-        #[cfg(windows)]
-        if let Some(folder) = job.destination.parent()
-            && let Err(error) = std::process::Command::new("explorer.exe")
-                .arg(folder)
-                .spawn()
-        {
-            self.local_error = Some(language.format(
-                "Couldn't open the save folder. {folder}: {error}",
-                &[
-                    ("folder", folder.display().to_string()),
-                    ("error", error.to_string()),
-                ],
-            ));
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = job;
-            self.local_error = Some(
-                language
-                    .text("Opening a save folder is currently supported on Windows only.")
-                    .into(),
-            );
+        let Some(folder) = job.destination.parent() else {
+            return;
+        };
+        let opener = if cfg!(windows) {
+            "explorer.exe"
+        } else {
+            "xdg-open"
+        };
+        match std::process::Command::new(opener).arg(folder).spawn() {
+            Ok(mut child) => {
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+            }
+            Err(error) => {
+                self.local_error = Some(language.format(
+                    "Couldn't open the save folder. {folder}: {error}",
+                    &[
+                        ("folder", folder.display().to_string()),
+                        ("error", error.to_string()),
+                    ],
+                ));
+            }
         }
     }
 
@@ -1366,7 +1388,11 @@ impl App {
                                             if index > 0 {
                                                 ui.separator();
                                             }
-                                            self.download_row(ui, job);
+                                            self.download_row(
+                                                ui,
+                                                job,
+                                                snapshot.speed_history.get(&job.id),
+                                            );
                                         }
                                     });
                             });
@@ -1412,7 +1438,7 @@ impl App {
                 footer.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     small(
                         ui,
-                        if snapshot.state.settings.close_to_tray {
+                        if self.tray_available && snapshot.state.settings.close_to_tray {
                             language.text("Closes to tray")
                         } else {
                             language.text("Closing exits DownloadManager")

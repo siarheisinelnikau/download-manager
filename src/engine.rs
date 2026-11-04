@@ -1,3 +1,5 @@
+mod segments;
+
 use crate::{model::Download, storage};
 use anyhow::{Context, Result, bail, ensure};
 use fs2::FileExt;
@@ -48,7 +50,7 @@ pub struct Bandwidth {
 }
 
 impl Bandwidth {
-    fn throttle(&self, count: usize, control: &AtomicU8) {
+    fn throttle(&self, count: usize, stopped: impl Fn() -> bool) {
         let limit = self.kib_per_second.load(Ordering::Relaxed);
         if limit == 0 {
             return;
@@ -60,9 +62,7 @@ impl Bandwidth {
             *next = Some(end);
             end
         };
-        while control.load(Ordering::Relaxed) == 0
-            && self.kib_per_second.load(Ordering::Relaxed) == limit
-        {
+        while !stopped() && self.kib_per_second.load(Ordering::Relaxed) == limit {
             let Some(wait) = deadline.checked_duration_since(Instant::now()) else {
                 break;
             };
@@ -107,12 +107,18 @@ impl Response {
 
 /// The real network adapter. Range and If-Range are sent together on resume.
 fn fetch(url: &str, resume: Option<(u64, &str)>) -> Result<Response> {
+    fetch_range(url, resume.map(|(start, etag)| (start, None, etag)))
+}
+
+fn fetch_range(url: &str, range: Option<(u64, Option<u64>, &str)>) -> Result<Response> {
     let agent = agent(url.starts_with("https:"));
     let mut request = agent.get(url).header("Accept-Encoding", "identity");
-    if let Some((offset, etag)) = resume {
-        request = request
-            .header("Range", &format!("bytes={offset}-"))
-            .header("If-Range", etag);
+    if let Some((start, end, etag)) = range {
+        let range = match end {
+            Some(end) => format!("bytes={start}-{end}"),
+            None => format!("bytes={start}-"),
+        };
+        request = request.header("Range", &range).header("If-Range", etag);
     }
     let response = request.call().context(
         "Request failed (network, TLS certificate, redirect or timeout). Partial data is preserved",
@@ -125,7 +131,7 @@ fn fetch(url: &str, resume: Option<(u64, &str)>) -> Result<Response> {
         .filter(|(key, _)| {
             matches!(
                 key.as_str(),
-                "content-encoding" | "etag" | "content-length" | "content-range"
+                "content-encoding" | "etag" | "content-length" | "content-range" | "accept-ranges"
             )
         })
         .map(|(key, value)| Ok((key.as_str().to_owned(), value.to_str()?.to_owned())))
@@ -179,13 +185,74 @@ pub fn transfer(
     bandwidth: Arc<Bandwidth>,
     progress: impl FnMut(Progress),
 ) -> Result<Outcome> {
-    transfer_with_source(job, control, bandwidth, progress, fetch)
+    transfer_with_connections(job, control, bandwidth, 1, progress)
+}
+
+pub fn transfer_with_connections(
+    job: &Download,
+    control: Arc<AtomicU8>,
+    bandwidth: Arc<Bandwidth>,
+    connections: usize,
+    progress: impl FnMut(Progress),
+) -> Result<Outcome> {
+    transfer_from(job, control, bandwidth, connections, progress, fetch)
 }
 
 pub fn transfer_with_source(
     job: &Download,
     control: Arc<AtomicU8>,
     bandwidth: Arc<Bandwidth>,
+    progress: impl FnMut(Progress),
+    source: impl FnOnce(&str, Option<(u64, &str)>) -> Result<Response>,
+) -> Result<Outcome> {
+    transfer_from(job, control, bandwidth, 1, progress, source)
+}
+
+const SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
+
+struct SpeedMeter {
+    sampled_at: Instant,
+    sampled_bytes: u64,
+    speed: Option<f64>,
+}
+
+impl SpeedMeter {
+    fn new(bytes: u64) -> Self {
+        Self {
+            sampled_at: Instant::now(),
+            sampled_bytes: bytes,
+            speed: None,
+        }
+    }
+
+    fn sample(&mut self, bytes: u64, total: Option<u64>) -> Option<Progress> {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.sampled_at);
+        if elapsed < SAMPLE_INTERVAL {
+            return None;
+        }
+        let seconds = elapsed.as_secs_f64();
+        let rate = bytes.saturating_sub(self.sampled_bytes) as f64 / seconds;
+        let weight = 1.0 - (-seconds / 2.0).exp();
+        let speed = self
+            .speed
+            .map_or(rate, |previous| previous + weight * (rate - previous));
+        self.sampled_at = now;
+        self.sampled_bytes = bytes;
+        self.speed = Some(speed);
+        Some(Progress {
+            bytes,
+            total,
+            speed,
+        })
+    }
+}
+
+fn transfer_from(
+    job: &Download,
+    control: Arc<AtomicU8>,
+    bandwidth: Arc<Bandwidth>,
+    connections: usize,
     mut progress: impl FnMut(Progress),
     source: impl FnOnce(&str, Option<(u64, &str)>) -> Result<Response>,
 ) -> Result<Outcome> {
@@ -302,7 +369,7 @@ pub fn transfer_with_source(
     if offset > 0 && meta.etag.is_none() {
         bail!("Server supplied no strong ETag; safe resume is unavailable. Use Restart from zero.");
     }
-    let mut response = source(
+    let response = source(
         &job.url,
         if offset > 0 {
             Some((offset, meta.etag.as_deref().unwrap()))
@@ -366,17 +433,67 @@ pub fn transfer_with_source(
     }
     meta.total = total;
     checkpoint(&file, job, &mut meta, offset, &hash, false)?;
-    let reader = &mut response.body;
     let mut done = offset;
     let mut last_checkpoint = offset;
-    let mut last_publish = Instant::now();
-    let mut speed_bytes = offset;
     progress(Progress {
         bytes: done,
         total,
         speed: 0.0,
     });
+    let ranges_allowed = response
+        .header("accept-ranges")
+        .is_none_or(|value| !value.eq_ignore_ascii_case("none"));
+    let mut fallback = Some(response);
     let streaming: Result<Outcome> = (|| {
+        if ranges_allowed
+            && connections > 1
+            && let (Some(total), Some(etag)) = (total, meta.etag.clone())
+        {
+            let mut meter = SpeedMeter::new(offset);
+            let effective_url = meta.effective_url.clone();
+            let request = segments::Request {
+                url: &job.url,
+                effective_url: &effective_url,
+                etag: &etag,
+                offset,
+                total,
+                connections,
+            };
+            if let Some(outcome) = segments::stream(
+                request,
+                &mut file,
+                &control,
+                &bandwidth,
+                &mut fallback,
+                |file, prefix, received| {
+                    if prefix > done {
+                        file.seek(SeekFrom::Start(done))?;
+                        while done < prefix {
+                            let count = (prefix - done).min(buffer.len() as u64) as usize;
+                            file.read_exact(&mut buffer[..count])?;
+                            hash.update(&buffer[..count]);
+                            done += count as u64;
+                        }
+                    }
+                    if done - last_checkpoint >= 2 * 1024 * 1024 {
+                        checkpoint(file, job, &mut meta, done, &hash, false)?;
+                        last_checkpoint = done;
+                    }
+                    if let Some(sample) = meter.sample(received, Some(total)) {
+                        progress(sample);
+                    }
+                    Ok(())
+                },
+            )? {
+                ensure!(
+                    outcome != Outcome::Completed || done == total,
+                    "Parallel transfer ended before the declared length"
+                );
+                return Ok(outcome);
+            }
+        }
+        let mut meter = SpeedMeter::new(offset);
+        let mut reader = fallback.take().unwrap().body;
         loop {
             if control.load(Ordering::Relaxed) != 0 {
                 return Ok(control_outcome(&control));
@@ -405,7 +522,7 @@ pub fn transfer_with_source(
                 total.is_none_or(|n| next_done <= n),
                 "Response exceeded declared length; checkpoint preserved"
             );
-            bandwidth.throttle(read, &control);
+            bandwidth.throttle(read, || control.load(Ordering::Relaxed) != 0);
             file.write_all(&buffer[..read]).context("Cannot write partial file; check free disk space and permissions. Checkpoint preserved.")?;
             hash.update(&buffer[..read]);
             done = next_done;
@@ -413,15 +530,8 @@ pub fn transfer_with_source(
                 checkpoint(&file, job, &mut meta, done, &hash, false)?;
                 last_checkpoint = done;
             }
-            if last_publish.elapsed() >= Duration::from_millis(250) {
-                let speed = (done - speed_bytes) as f64 / last_publish.elapsed().as_secs_f64();
-                progress(Progress {
-                    bytes: done,
-                    total,
-                    speed,
-                });
-                speed_bytes = done;
-                last_publish = Instant::now();
+            if let Some(sample) = meter.sample(done, total) {
+                progress(sample);
             }
         }
     })();
