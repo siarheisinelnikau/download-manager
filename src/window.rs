@@ -698,27 +698,58 @@ impl CpuHost {
         self.ctx.memory_mut(|m| m.reset_areas());
         self.schedule(Instant::now());
     }
+    #[cfg(target_os = "linux")]
+    fn cursor_position(window: &Window) -> Option<(f64, f64)> {
+        use winit::raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
+
+        let handle = window.display_handle().ok()?;
+        let RawDisplayHandle::Xlib(handle) = handle.as_raw() else {
+            return None;
+        };
+        let display = handle.display?.as_ptr().cast();
+        let xlib = x11_dl::xlib::Xlib::open().ok()?;
+        let (mut root, mut child, mut x, mut y, mut window_x, mut window_y, mut mask) =
+            (0, 0, 0, 0, 0, 0, 0);
+        // Winit owns this Xlib display for the lifetime of the window. Query
+        // the screen root once, on the same thread that places the popup.
+        let on_screen = unsafe {
+            let window = (xlib.XRootWindow)(display, handle.screen);
+            (xlib.XQueryPointer)(
+                display,
+                window,
+                &mut root,
+                &mut child,
+                &mut x,
+                &mut y,
+                &mut window_x,
+                &mut window_y,
+                &mut mask,
+            )
+        };
+        (on_screen != 0).then_some((f64::from(x), f64::from(y)))
+    }
+
     fn dispatch_tray(&mut self, event_loop: &ActiveEventLoop, command: crate::tray::Command) {
         use crate::tray::Command as T;
         match command {
             T::Popup { x, y } => self.toggle_popup((x, y)),
             #[cfg(target_os = "linux")]
             T::QuickDownloads => {
-                let anchor = self
-                    .window
-                    .as_ref()
-                    .and_then(|window| {
-                        window
+                let Some(window) = &self.window else {
+                    return;
+                };
+                let anchor = Self::cursor_position(window)
+                    .or_else(|| {
+                        let monitor = window
                             .current_monitor()
-                            .or_else(|| window.primary_monitor())
-                    })
-                    .map_or((1000., 0.), |monitor| {
+                            .or_else(|| window.primary_monitor())?;
                         let position = monitor.position();
-                        (
-                            position.x as f64 + monitor.size().width as f64 - 18.,
-                            position.y as f64,
-                        )
-                    });
+                        Some((
+                            f64::from(position.x) + f64::from(monitor.size().width) - 18.,
+                            f64::from(position.y),
+                        ))
+                    })
+                    .unwrap_or((1000., 0.));
                 self.toggle_popup(anchor);
             }
             T::Queue => {

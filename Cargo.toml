@@ -1,6 +1,6 @@
 [package]
 name = "download-manager"
-version = "0.4.0"
+version = "0.4.4"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
@@ -34,6 +34,7 @@ gtk = "0.18"
 rustix = { version = "1.1", features = ["fs"] }
 softbuffer = { version = "=0.4.8", default-features = false, features = ["x11", "x11-dlopen"] }
 tray-icon = { version = "=0.21.3", default-features = false }
+x11-dl = "2.21"
 
 [build-dependencies]
 winresource = "0.1.34"

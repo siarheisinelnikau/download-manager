@@ -552,7 +552,7 @@ checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
 name = "download-manager"
-version = "0.4.0"
+version = "0.4.4"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -576,6 +576,7 @@ dependencies = [
  "windows-sys 0.61.2",
  "winit",
  "winresource",
+ "x11-dl",
 ]
 
 [[package]]
