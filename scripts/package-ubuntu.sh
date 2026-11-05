@@ -80,7 +80,7 @@ Section: net
 Priority: optional
 Architecture: amd64
 Maintainer: DownloadManager contributors <9218241+siarheisinelnikau@users.noreply.github.com>
-Depends: libc6 (>= 2.35), libgtk-3-0t64 | libgtk-3-0, libssl3t64 | libssl3, ca-certificates, libx11-6, libxcb1, libxcb-shm0, libxkbcommon0, libxkbcommon-x11-0, libayatana-appindicator3-1, libglib2.0-bin, xdg-utils, zenity, pkexec | policykit-1, apt, dpkg
+Depends: libc6 (>= 2.35), libgtk-3-0t64 | libgtk-3-0, libssl3t64 | libssl3, ca-certificates, libx11-6, libxext6, libxcb1, libxcb-shm0, libxkbcommon0, libxkbcommon-x11-0, libayatana-appindicator3-1, libglib2.0-bin, xdg-utils, zenity, pkexec | policykit-1, apt, dpkg
 Description: Native HTTP download manager
  Queue and resume downloads with verified byte ranges, live speed graphs
  and desktop tray controls.

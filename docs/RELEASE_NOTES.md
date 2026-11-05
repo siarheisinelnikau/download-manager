@@ -1,3 +1,19 @@
+# DownloadManager v0.4.4
+
+On GNOME with a compatible legacy XEmbed tray, the tray icon's background is clipped to the round mark. Left-click opens the compact download view and right-click opens the menu.
+
+# DownloadManager v0.4.3
+
+On Ubuntu with an XEmbed tray, right-click opens a menu using the system GTK theme. It aligns with the icon and opens inward from either panel edge. Left-click still toggles the compact download view.
+
+# DownloadManager v0.4.2
+
+The compact Linux tray window opens near the click or pointer and stays inside the corresponding monitor. The package also includes the separate left- and right-click actions from v0.4.1.
+
+# DownloadManager v0.4.1
+
+On Ubuntu desktops with X11 tray support, left-click the tray icon to open the compact download view and right-click to open the menu. On AppIndicator-only desktops, the menu keeps **Quick download view**.
+
 # DownloadManager v0.4.0
 
 - Active downloads show a 30-second speed graph, smoothed speed and ETA. The main queue and compact tray window animate progress between reports at roughly 60 frames per second.

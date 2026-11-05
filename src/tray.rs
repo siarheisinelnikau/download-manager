@@ -64,7 +64,10 @@ pub fn tooltip(snapshot: &Snapshot) -> String {
 
 #[cfg(any(windows, target_os = "linux"))]
 pub struct NativeTray {
+    #[cfg(windows)]
     _icon: tray_icon::TrayIcon,
+    #[cfg(target_os = "linux")]
+    _icon: linux::Icon,
     alive: std::sync::Arc<std::sync::atomic::AtomicBool>,
     #[cfg(windows)]
     last_tooltip: String,
@@ -87,10 +90,7 @@ impl NativeTray {
             Arc,
             atomic::{AtomicBool, Ordering},
         };
-        use tray_icon::{
-            TrayIconBuilder,
-            menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
-        };
+        use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
         let alive = Arc::new(AtomicBool::new(true));
         let menu = Menu::new();
         #[cfg(target_os = "linux")]
@@ -113,33 +113,31 @@ impl NativeTray {
             &PredefinedMenuItem::separator(),
             &quit,
         ])?;
-        // Rasterize at the shell's small-icon metric; do not shrink a fixed 32px bitmap.
         #[cfg(windows)]
-        let side = unsafe {
-            windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(
-                windows_sys::Win32::UI::WindowsAndMessaging::SM_CXSMICON,
-            )
-        }
-        .clamp(16, 256) as u32;
+        let icon = {
+            use tray_icon::TrayIconBuilder;
+
+            // Rasterize at the shell's small-icon metric.
+            let side = unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::GetSystemMetrics(
+                    windows_sys::Win32::UI::WindowsAndMessaging::SM_CXSMICON,
+                )
+            }
+            .clamp(16, 256) as u32;
+            TrayIconBuilder::new()
+                .with_id("download-manager")
+                .with_menu(Box::new(menu))
+                .with_menu_on_left_click(false)
+                .with_tooltip("DownloadManager · Click to view downloads")
+                .with_icon(tray_icon::Icon::from_rgba(
+                    crate::icons::rgba(side),
+                    side,
+                    side,
+                )?)
+                .build()?
+        };
         #[cfg(target_os = "linux")]
-        let side = 32;
-        let builder = TrayIconBuilder::new();
-        #[cfg(target_os = "linux")]
-        let builder = builder
-            .with_id(format!("download-manager-{}", std::process::id()))
-            .with_temp_dir_path(download_manager::storage::data_directory()?.join("tray-icons"));
-        #[cfg(windows)]
-        let builder = builder.with_id("download-manager");
-        let icon = builder
-            .with_menu(Box::new(menu))
-            .with_menu_on_left_click(false)
-            .with_tooltip("DownloadManager · Click to view downloads")
-            .with_icon(tray_icon::Icon::from_rgba(
-                crate::icons::rgba(side),
-                side,
-                side,
-            )?)
-            .build()?;
+        let icon = linux::Icon::new(menu, send.clone())?;
         #[cfg(windows)]
         {
             use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
@@ -185,7 +183,7 @@ impl NativeTray {
             }
             let command = match event.id.0.as_str() {
                 #[cfg(target_os = "linux")]
-                "quick" => Command::QuickDownloads,
+                "quick" => linux::quick_downloads_command(),
                 "queue" => Command::Queue,
                 "new" => Command::NewDownload,
                 "pause" => Command::PauseAll,

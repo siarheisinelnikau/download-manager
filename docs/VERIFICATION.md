@@ -1,10 +1,38 @@
 # Verification record
 
+## v0.4.4 GNOME tray icon
+
+An isolated GNOME Shell 50.1 and XWayland session loaded the packaged application. The 16-pixel tray icon retained its 24-bit socket and gained a 14-pixel bounding shape. A compositor capture limited to the icon showed the panel color at all four corners, the blue mark and the white arrow. The shape change applies only to a dedicated, input-transparent socket. GNOME's button forwarding and the existing GTK menu and compact-view handlers are preserved.
+
+The separate Xvfb fixtures exercised both tray clicks and the AppIndicator fallback. Manual clicks on the shaped icon in the user's GNOME session remain to be checked. The Ubuntu package checksum, formatting, Clippy with warnings denied and all 39 Rust tests passed.
+
+## v0.4.3 Ubuntu tray menu
+
+In two isolated X11 runs, the GTK menu touched the icon bounds at both the top and bottom edges of the display. Left-click opened and hid the compact view, and **Show downloads** restored the full window. The separate AppIndicator fixture still opened the compact view 28 pixels from the pointer.
+
+The packaged executable registered a 16-pixel XEmbed icon in a separate GNOME Shell 50.1 and XWayland session. Both tray clicks were exercised through the Xvfb tray fixture. GNOME Shell 50.1 used a 24-bit tray socket. An experimental 32-bit XEmbed plug caused the isolated shell to abort and was removed. The square background on that host remains unresolved.
+
+The Ubuntu amd64 package passed checksum verification. Formatting, Clippy with warnings denied and all 39 Rust tests passed.
+
+## v0.4.2 Ubuntu tray placement
+
+Two isolated X11 tray runs placed the icon on opposite sides of the display. Left-click opened the compact window 28 pixels from the pointer in both runs. Right-click opened the GTK menu, and **Show downloads** restored the full window. A separate AppIndicator D-Bus test also opened the compact window 28 pixels from the pointer.
+
+The local amd64 package passed checksum verification. Formatting, Clippy with warnings denied and all 39 Rust tests passed.
+
+## v0.4.1 Ubuntu tray gestures
+
+Ubuntu 26.04.1 GNOME embedded the new icon over XWayland. In a separate X11 session, left-click opened and hid the 400-pixel compact window. Right-click opened the native menu while the main window stayed hidden. **Show downloads** from that menu restored the same window at its full size. The AppIndicator fallback also passed the live tray and loopback transfer checks with GTK using Wayland.
+
+The local amd64 package passed checksum verification. Formatting, Clippy with warnings denied and all 39 Rust tests passed.
+
 ## v0.4.0 Ubuntu verification
 
 On Ubuntu 26.04.1 amd64 with Rust and Cargo 1.99.1, the locked release build passed formatting, Clippy with warnings denied and all 39 Rust tests. The Ubuntu packaging script produced an amd64 Debian package with version 0.4.0.
 
 A real GNOME/XWayland session ran the executable extracted from that package. The GNOME AppIndicator host registered the application's menu. Resuming a fixture through the menu sent 32 simultaneous HTTP range requests. The window showed smoothed speed and ETA and rendered the [active speed chart](screenshots/ubuntu-speed-chart.png). The transfer continued after the window closed to the tray and the downloaded 32 MiB matched the fixture SHA-256. The tray menu opened the [compact window](screenshots/ubuntu-tray-popup.png) during the transfer, restored the full window and quit the application. XDamage reported 60.4 updates per second for the main window, 60.8 for the compact window and zero while hidden during the same transfer. The package was also installed through polkit using a local 0.3.99 predecessor build to prepare the live update check.
+
+The installed 0.3.99 test package found the public v0.4.0 release from its Settings page, downloaded the matching Ubuntu asset and invoked the system installer. After polkit approval, dpkg reported 0.4.0 and a new process opened the application automatically. The restarted test retained its completed job, saved transfer settings and fixture file contents. The check ran on an isolated X11 display and D-Bus session.
 
 The release workflow checks and builds on Windows and Ubuntu 22.04. It verifies package metadata and SHA-256 before uploading both packages, the notices and a checksum manifest to a draft. The release becomes public once GitHub reports the expected SHA-256 for every uploaded asset.
 
