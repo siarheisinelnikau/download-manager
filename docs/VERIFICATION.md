@@ -1,5 +1,13 @@
 # Verification record
 
+## v0.4.6 native GNOME tray integration
+
+The packaged executable and its bundled companion were tested in isolated GNOME Shell 50.1 and XWayland sessions. Both the top panel and the bottom Dash to Panel layout opened GNOME Shell's AppIndicator menu on right-click. Left-click showed the 400-pixel compact download view, and a second left-click hid it. The native menu's **Show downloads** command restored the full window.
+
+Disabling the companion restored the XEmbed backend. Re-enabling it restored native integration with the existing menu model and indicator connection. Separate X11 fixtures passed both legacy tray clicks and AppIndicator-only menu activation. The fixture profiles used a private settings backend.
+
+Formatting, Clippy with warnings denied, all 39 Rust tests, JavaScript syntax, package metadata and SHA-256 verification passed. The package contains the companion under the GNOME system extensions directory. First-time installation requires a new GNOME login and enabling **DownloadManager Tray**. GNOME 45–49 and mixed-monitor scaling remain manual checks.
+
 ## v0.4.5 system GTK tray menu
 
 The XEmbed menu uses GTK's default style without application CSS or spacing overrides. Isolated X11 runs with dark and light Ubuntu themes verified that left-click opens and hides the compact view, right-click opens the menu touching the icon bounds, and **Show downloads** restores the full window. The icon was tested at the top and bottom display edges.

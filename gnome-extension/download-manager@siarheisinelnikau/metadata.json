@@ -1,0 +1,9 @@
+{
+    "uuid": "download-manager@siarheisinelnikau",
+    "name": "DownloadManager Tray",
+    "description": "Open DownloadManager's compact download view with a left click and the GNOME AppIndicator menu with a right click.",
+    "shell-version": ["45", "46", "47", "48", "49", "50"],
+    "url": "https://github.com/siarheisinelnikau/download-manager",
+    "version": 1,
+    "version-name": "0.4.6"
+}

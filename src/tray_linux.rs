@@ -12,17 +12,17 @@ use std::{
     time::Duration,
 };
 
+#[path = "tray_linux_gnome.rs"]
+mod gnome;
 #[path = "tray_linux_shape.rs"]
 mod shape;
 
-pub(super) enum Icon {
-    XEmbed {
-        _icon: glib::Object,
-        _menu: tray_icon::menu::Menu,
-    },
-    AppIndicator {
-        _icon: tray_icon::TrayIcon,
-    },
+pub(super) struct Icon {
+    xembed: Option<glib::Object>,
+    indicator: Option<tray_icon::TrayIcon>,
+    menu: tray_icon::menu::Menu,
+    send: Arc<dyn Fn(Command) + Send + Sync>,
+    gnome_bridge: bool,
 }
 
 impl Icon {
@@ -30,16 +30,61 @@ impl Icon {
         menu: tray_icon::menu::Menu,
         send: Arc<dyn Fn(Command) + Send + Sync>,
     ) -> Result<Self> {
-        const SIDE: u32 = 32;
+        let xembed = Self::try_xembed(&menu, Arc::clone(&send));
+        let indicator = if xembed.is_none() {
+            Some(Self::app_indicator(menu.clone(), 32)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            xembed,
+            indicator,
+            menu,
+            send,
+            gnome_bridge: false,
+        })
+    }
+
+    fn try_xembed(
+        menu: &tray_icon::menu::Menu,
+        send: Arc<dyn Fn(Command) + Send + Sync>,
+    ) -> Option<glib::Object> {
         let x11 = gdk::Display::default()
             .is_some_and(|display| display.type_().name() == "GdkX11Display");
-        if x11 && let Some(icon) = Self::xembed(&menu, send, SIDE) {
-            return Ok(Self::XEmbed {
-                _icon: icon,
-                _menu: menu,
-            });
+        if x11 {
+            Self::xembed(menu, send, 32)
+        } else {
+            None
         }
-        Self::app_indicator(menu, SIDE)
+    }
+
+    fn set_gnome_bridge(&mut self, enabled: bool) {
+        if self.gnome_bridge == enabled {
+            return;
+        }
+        self.gnome_bridge = enabled;
+        if let Err(error) = self.switch_gnome_bridge(enabled) {
+            eprintln!("Cannot switch the GNOME tray integration: {error:#}");
+        }
+    }
+
+    fn switch_gnome_bridge(&mut self, enabled: bool) -> Result<()> {
+        if enabled {
+            if let Some(indicator) = &mut self.indicator {
+                indicator.set_visible(true)?;
+            } else {
+                self.indicator = Some(Self::app_indicator(self.menu.clone(), 32)?);
+            }
+            self.xembed = None;
+        } else if self.xembed.is_none()
+            && let Some(icon) = Self::try_xembed(&self.menu, Arc::clone(&self.send))
+        {
+            if let Some(indicator) = &mut self.indicator {
+                indicator.set_visible(false)?;
+            }
+            self.xembed = Some(icon);
+        }
+        Ok(())
     }
 
     fn xembed(
@@ -98,7 +143,7 @@ impl Icon {
         Some(icon)
     }
 
-    fn app_indicator(menu: tray_icon::menu::Menu, side: u32) -> Result<Self> {
+    fn app_indicator(menu: tray_icon::menu::Menu, side: u32) -> Result<tray_icon::TrayIcon> {
         let watcher = std::process::Command::new("gdbus")
             .args([
                 "call",
@@ -121,7 +166,7 @@ impl Icon {
             "The desktop AppIndicator host is unavailable"
         );
         let icon = tray_icon::TrayIconBuilder::new()
-            .with_id(format!("download-manager-{}", std::process::id()))
+            .with_id("download-manager")
             .with_temp_dir_path(download_manager::storage::data_directory()?.join("tray-icons"))
             .with_menu(Box::new(menu))
             .with_icon(tray_icon::Icon::from_rgba(
@@ -130,7 +175,7 @@ impl Icon {
                 side,
             )?)
             .build()?;
-        Ok(Self::AppIndicator { _icon: icon })
+        Ok(icon)
     }
 }
 
@@ -167,7 +212,9 @@ pub(super) fn quick_downloads_command() -> Command {
             y: y * scale,
         })
     });
-    anchor.unwrap_or(Command::QuickDownloads)
+    anchor
+        .or_else(gnome::anchor)
+        .unwrap_or(Command::QuickDownloads)
 }
 
 fn wait_for_embedding(icon: &glib::Object) -> bool {
@@ -192,8 +239,14 @@ fn wait_for_embedding(icon: &glib::Object) -> bool {
     icon.property::<bool>("embedded")
 }
 
+enum Update {
+    State(MenuState),
+    GnomeBridge(bool),
+    Stop,
+}
+
 pub struct Tray {
-    updates: glib::Sender<Option<MenuState>>,
+    updates: glib::Sender<Update>,
     last_state: Option<MenuState>,
     worker: Option<thread::JoinHandle<()>>,
 }
@@ -203,6 +256,7 @@ impl Tray {
         let (ready, init) = mpsc::sync_channel(1);
         #[allow(deprecated)]
         let (updates, receiver) = MainContext::channel(Priority::DEFAULT);
+        let bridge_updates = updates.clone();
         let worker = thread::Builder::new()
             .name("linux-tray".into())
             .spawn(move || {
@@ -211,7 +265,7 @@ impl Tray {
                 gdk::set_allowed_backends("x11,*");
                 let tray = gtk::init()
                     .context("Cannot start GTK for the system tray")
-                    .and_then(|()| NativeTray::new(send));
+                    .and_then(|()| NativeTray::new(Arc::clone(&send)));
                 let mut tray = match tray {
                     Ok(tray) => tray,
                     Err(error) => {
@@ -219,11 +273,23 @@ impl Tray {
                         return;
                     }
                 };
-                let _source = receiver.attach(None, move |state| {
-                    if let Some((language, enabled)) = state {
+                let _gnome = match gnome::Integration::new(send, bridge_updates) {
+                    Ok(integration) => Some(integration),
+                    Err(error) => {
+                        eprintln!("GNOME tray integration is unavailable: {error:#}");
+                        None
+                    }
+                };
+                let _source = receiver.attach(None, move |update| match update {
+                    Update::State((language, enabled)) => {
                         tray.update_menu(language, enabled);
                         ControlFlow::Continue
-                    } else {
+                    }
+                    Update::GnomeBridge(enabled) => {
+                        tray._icon.set_gnome_bridge(enabled);
+                        ControlFlow::Continue
+                    }
+                    Update::Stop => {
                         gtk::main_quit();
                         ControlFlow::Break
                     }
@@ -242,7 +308,7 @@ impl Tray {
 
     pub fn update(&mut self, snapshot: &Snapshot) {
         let state = menu_state(snapshot);
-        if self.last_state != Some(state) && self.updates.send(Some(state)).is_ok() {
+        if self.last_state != Some(state) && self.updates.send(Update::State(state)).is_ok() {
             self.last_state = Some(state);
         }
     }
@@ -258,7 +324,7 @@ impl Tray {
 
 impl Drop for Tray {
     fn drop(&mut self) {
-        let _ = self.updates.send(None);
+        let _ = self.updates.send(Update::Stop);
         if let Some(worker) = self.worker.take() {
             let _ = worker.join();
         }

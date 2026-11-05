@@ -59,6 +59,11 @@ install -Dm644 LICENSE "$doc/copyright"
 install -Dm644 "$stage/notices.txt" "$doc/THIRD_PARTY_NOTICES.txt"
 install -Dm644 docs/RELEASE_NOTES.md "$doc/RELEASE_NOTES.md"
 
+extension=download-manager@siarheisinelnikau
+extension_dir="$package/usr/share/gnome-shell/extensions/$extension"
+install -Dm644 "gnome-extension/$extension/metadata.json" "$extension_dir/metadata.json"
+install -Dm644 "gnome-extension/$extension/extension.js" "$extension_dir/extension.js"
+
 icon_dir="$package/usr/share/icons/hicolor/64x64/apps"
 install -d -m755 "$package/DEBIAN" "$package/usr/share/applications" "$icon_dir" dist
 "$binary" --export-icon "$icon_dir/download-manager.png"

@@ -38,6 +38,8 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libssl-dev xvfb xauth
       - name: Format, lint and synthetic/loopback tests
         run: |
+          node --input-type=module --check < gnome-extension/download-manager@siarheisinelnikau/extension.js
+          python3 -m json.tool gnome-extension/download-manager@siarheisinelnikau/metadata.json > /dev/null
           cargo fmt --all -- --check
           cargo clippy --locked --all-targets --features loopback-tests -- -D warnings
           cargo test --locked --all-targets --features loopback-tests -- --test-threads=2

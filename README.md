@@ -21,7 +21,7 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 
 ## Use
 
-1. On Windows x64, run `DownloadManager-v0.4.5-windows-amd64.exe`. On Ubuntu amd64, install the matching package with `sudo apt install ./DownloadManager-v0.4.5-ubuntu-amd64.deb`, then open **DownloadManager** from the application menu.
+1. On Windows x64, run `DownloadManager-v0.4.6-windows-amd64.exe`. On Ubuntu amd64, install the matching package with `sudo apt install ./DownloadManager-v0.4.6-ubuntu-amd64.deb`, then open **DownloadManager** from the application menu.
 2. Select **New download** (Ctrl+N). Paste a URL, select **Browse…** to choose a folder (or enter its path), and choose a filename. Select **Download** or press Enter from a form field. Invalid input stays in the form so you can correct it.
 3. Use **Pause**, **Resume**, or **Retry** on a row. The **•••** menu contains the save location, queue reordering and **Cancel download**. Cancel preserves partial data.
 4. If the server cannot safely resume, choose **••• → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.
@@ -30,6 +30,8 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 By default, closing the window keeps downloads running in the tray. On Ubuntu with an X11 tray host, left-click the icon to open the compact list near the pointer and right-click it for the menu. Ubuntu GNOME can host these icons through the AppIndicator extension. On desktops with only AppIndicator menus, select **Quick download view** for the compact list or **Show downloads** for the full window. On Windows, single-click the tray icon to show or hide a compact list of up to four unfinished downloads. **Open downloads** opens the full queue. Double-click opens the queue directly. Right-click opens **New download**, **Pause all**, **Resume paused**, **Settings** and **Quit DownloadManager**. The **×** button, Escape or clicking outside dismisses the popup. Settings and Quit are available from the tray context menu; the popup keeps only quick download actions. Disable **Keep running when closed** in Settings to exit on close instead. If the desktop tray is unavailable, closing exits the application.
 
 **Quit DownloadManager** requests checkpoints and waits for active workers to stop. A pending network read/request can delay exit until its timeout. A state-write error restores the window and displays a recovery message.
+
+On GNOME 45–50, the Ubuntu package includes **DownloadManager Tray**, a companion extension for Ubuntu AppIndicators. When enabled, left-click opens the compact view and right-click opens the menu rendered by GNOME Shell. After the first installation, sign out and sign back in so GNOME discovers the component, then enable it with `gnome-extensions enable download-manager@siarheisinelnikau` or the Extensions application. DownloadManager switches tray backends as the component is enabled or disabled. Other desktops use the XEmbed or AppIndicator controls described above.
 
 ## Reliability rules
 

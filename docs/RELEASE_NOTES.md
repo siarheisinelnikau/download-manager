@@ -1,3 +1,7 @@
+# DownloadManager v0.4.6
+
+The Ubuntu package includes the DownloadManager Tray companion for GNOME 45–50. With that component and Ubuntu AppIndicators enabled, right-click opens GNOME Shell's own menu and left-click opens the compact download view. GNOME discovers the new component after signing out and back in. Enable DownloadManager Tray once through Extensions or `gnome-extensions enable download-manager@siarheisinelnikau`.
+
 # DownloadManager v0.4.5
 
 The Linux XEmbed tray menu uses the system GTK theme with its default spacing and shape. Left-click opens the compact download view, and right-click opens the menu beside the icon.
