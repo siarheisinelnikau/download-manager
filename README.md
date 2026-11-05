@@ -21,7 +21,7 @@ Independent MIT-licensed implementation. No affiliation with Internet Download M
 
 ## Use
 
-1. On Windows x64, run `DownloadManager-v0.4.4-windows-amd64.exe`. On Ubuntu amd64, install the matching package with `sudo apt install ./DownloadManager-v0.4.4-ubuntu-amd64.deb`, then open **DownloadManager** from the application menu.
+1. On Windows x64, run `DownloadManager-v0.4.5-windows-amd64.exe`. On Ubuntu amd64, install the matching package with `sudo apt install ./DownloadManager-v0.4.5-ubuntu-amd64.deb`, then open **DownloadManager** from the application menu.
 2. Select **New download** (Ctrl+N). Paste a URL, select **Browse…** to choose a folder (or enter its path), and choose a filename. Select **Download** or press Enter from a form field. Invalid input stays in the form so you can correct it.
 3. Use **Pause**, **Resume**, or **Retry** on a row. The **•••** menu contains the save location, queue reordering and **Cancel download**. Cancel preserves partial data.
 4. If the server cannot safely resume, choose **••• → Restart from zero…** and confirm removal of that task's partial data. Existing final files remain protected.

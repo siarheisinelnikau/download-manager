@@ -1,3 +1,7 @@
+# DownloadManager v0.4.5
+
+The Linux XEmbed tray menu uses the system GTK theme with its default spacing and shape. Left-click opens the compact download view, and right-click opens the menu beside the icon.
+
 # DownloadManager v0.4.4
 
 On GNOME with a compatible legacy XEmbed tray, the tray icon's background is clipped to the round mark. Left-click opens the compact download view and right-click opens the menu.
