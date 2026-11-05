@@ -76,7 +76,9 @@ impl Icon {
             None
         });
         let gtk_menu = menu.gtk_context_menu();
-        style_menu(&gtk_menu);
+        gtk_menu.set_anchor_hints(
+            gdk::AnchorHints::FLIP_Y | gdk::AnchorHints::SLIDE_X | gdk::AnchorHints::SLIDE_Y,
+        );
         icon.connect_local("popup-menu", false, move |args| {
             if let Ok(icon) = args[0].get::<glib::Object>()
                 && let Some((root, rect)) = icon_geometry(&icon)
@@ -129,28 +131,6 @@ impl Icon {
             )?)
             .build()?;
         Ok(Self::AppIndicator { _icon: icon })
-    }
-}
-
-fn style_menu(menu: &gtk::Menu) {
-    menu.set_anchor_hints(
-        gdk::AnchorHints::FLIP_Y | gdk::AnchorHints::SLIDE_X | gdk::AnchorHints::SLIDE_Y,
-    );
-    menu.set_reserve_toggle_size(false);
-    let css = gtk::CssProvider::new();
-    if css
-        .load_from_data(
-            b"menu { padding: 5px; border-radius: 10px; }
-              menuitem { min-height: 26px; padding: 2px 10px; border-radius: 6px; }",
-        )
-        .is_ok()
-    {
-        menu.style_context()
-            .add_provider(&css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
-        for item in menu.children() {
-            item.style_context()
-                .add_provider(&css, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
-        }
     }
 }
 

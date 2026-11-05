@@ -1,5 +1,11 @@
 # Verification record
 
+## v0.4.5 system GTK tray menu
+
+The XEmbed menu uses GTK's default style without application CSS or spacing overrides. Isolated X11 runs with dark and light Ubuntu themes verified that left-click opens and hides the compact view, right-click opens the menu touching the icon bounds, and **Show downloads** restores the full window. The icon was tested at the top and bottom display edges.
+
+Formatting, Clippy with warnings denied and the Ubuntu package checksum passed. The menu is rendered by GTK. GNOME Shell renders AppIndicator menus through a separate backend.
+
 ## v0.4.4 GNOME tray icon
 
 An isolated GNOME Shell 50.1 and XWayland session loaded the packaged application. The 16-pixel tray icon retained its 24-bit socket and gained a 14-pixel bounding shape. A compositor capture limited to the icon showed the panel color at all four corners, the blue mark and the white arrow. The shape change applies only to a dedicated, input-transparent socket. GNOME's button forwarding and the existing GTK menu and compact-view handlers are preserved.
