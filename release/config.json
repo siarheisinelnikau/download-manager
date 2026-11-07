@@ -1,0 +1,16 @@
+{
+  "repository": "siarheisinelnikau/download-manager",
+  "product": "DownloadManager",
+  "kind": "desktop",
+  "assets": [
+    {
+      "name": "DownloadManager-v{version}-ubuntu-amd64.deb"
+    },
+    {
+      "name": "DownloadManager-v{version}-windows-amd64.exe"
+    }
+  ],
+  "notices": true,
+  "checksum_aliases": [],
+  "package": "download-manager"
+}
