@@ -1,0 +1,72 @@
+name: Checked release builds
+'on':
+  workflow_call: {}
+permissions:
+  contents: read
+env:
+  CARGO_BUILD_JOBS: 2
+  CARGO_TARGET_DIR: target
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+      with:
+        components: rustfmt, clippy
+        targets: x86_64-pc-windows-msvc
+        toolchain: stable
+    - name: Format, lint and synthetic/loopback tests
+      shell: pwsh
+      run: ./scripts/check.ps1 -Loopback
+    - name: Build portable Windows amd64 package
+      shell: pwsh
+      run: ./scripts/package.ps1 -SkipChecks
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: DownloadManager-windows-amd64
+        path: dist/*
+    permissions:
+      contents: read
+    timeout-minutes: 30
+  ubuntu:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+      with:
+        components: rustfmt, clippy
+        toolchain: stable
+    - name: Install Ubuntu build and smoke-test dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libssl-dev xvfb xauth
+    - name: Format, lint and synthetic/loopback tests
+      run: |
+        node --input-type=module --check < gnome-extension/download-manager@siarheisinelnikau/extension.js
+        python3 -m json.tool gnome-extension/download-manager@siarheisinelnikau/metadata.json > /dev/null
+        cargo fmt --all -- --check
+        cargo clippy --locked --all-targets --features loopback-tests -- -D warnings
+        cargo test --locked --all-targets --features loopback-tests -- --test-threads=2
+    - name: Build Ubuntu amd64 package
+      run: ./scripts/package-ubuntu.sh
+    - name: Install the Ubuntu package and render a settings frame
+      run: |
+        sudo apt-get install -y --no-remove --no-install-recommends ./dist/*.deb
+        export DOWNLOAD_MANAGER_DATA_DIR="$PWD/.local/gui-smoke"
+        mkdir -p "$DOWNLOAD_MANAGER_DATA_DIR"
+        printf '%s\n' '{"schema":1,"next_id":1,"settings":{"startup_update_check":false},"downloads":[]}' > "$DOWNLOAD_MANAGER_DATA_DIR/state.json"
+        xvfb-run -a timeout 10s /usr/bin/download-manager \
+          --capture-ui settings "$DOWNLOAD_MANAGER_DATA_DIR/settings.png"
+        test -s "$DOWNLOAD_MANAGER_DATA_DIR/settings.png"
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: DownloadManager-ubuntu-amd64
+        path: dist/*
+    permissions:
+      contents: read
+    timeout-minutes: 30
